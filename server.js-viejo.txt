@@ -1,0 +1,109 @@
+import express from 'express';
+import sqlite3 from 'sqlite3';
+import fs from 'fs';
+import net from 'net';
+
+const sql = sqlite3.verbose();
+const app = express();
+
+app.use(express.json());
+
+const db = new sql.Database('./data.sqlite');
+
+// Inicializar tablas
+db.serialize(() => {
+    db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, item TEXT)");
+    db.run("CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY, action TEXT)");
+});
+
+// Función para normalizar respuestas HTTP
+const response = (res, data, code = 200) => res.json({ statusCode: code, data });
+
+// --- Endpoints HTTP existentes ---
+app.get('/users', (req, res) => db.all("SELECT * FROM users", (err, rows) => response(res, rows)));
+app.post('/users', (req, res) => db.run("INSERT INTO users (name) VALUES (?)", [req.body.name], function() { response(res, { id: this.lastID })}));
+app.delete('/users/:id', (req, res) => db.run("DELETE FROM users WHERE id = ?", req.params.id, () => response(res, { deleted: req.params.id })));
+
+app.get('/items', (req, res) => db.all("SELECT * FROM items", (err, rows) => response(res, rows)));
+app.post('/items', (req, res) => db.run("INSERT INTO items (item) VALUES (?)", [req.body.item], function() { response(res, { id: this.lastID })}));
+app.delete('/items/:id', (req, res) => db.run("DELETE FROM items WHERE id = ?", req.params.id, () => response(res, { deleted: req.params.id })));
+
+app.get('/logs', (req, res) => db.all("SELECT * FROM logs", (err, rows) => response(res, rows)));
+app.post('/logs', (req, res) => db.run("INSERT INTO logs (action) VALUES (?)", [req.body.action], function() { response(res, { id: this.lastID })}));
+
+app.post('/backup', (req, res) => {
+    fs.copyFileSync('./data.sqlite', './backup.sqlite');
+    response(res, { message: "Backup realizado correctamente" });
+});
+
+app.delete('/truncate', (req, res) => {
+    db.serialize(() => {
+        db.run("DELETE FROM users");
+        db.run("DELETE FROM items");
+        db.run("DELETE FROM logs");
+    });
+    response(res, { message: "Base de datos vaciada" });
+});
+
+app.listen(80, () => console.log('Servidor HTTP en puerto 80'));
+
+// --- NUEVO: Servidor TCP Socket en puerto 6061 ---
+const tcpServer = net.createServer((socket) => {
+    console.log('Cliente conectado por TCP Socket');
+
+    socket.on('data', (data) => {
+        const message = data.toString().trim();
+        console.log(`Mensaje recibido: ${message}`);
+
+        // Formato: {insert:<element>}
+        if (message.startsWith('{insert:') && message.endsWith('}')) {
+            const content = message.slice(8, -1).trim();
+            try {
+                const parsedData = JSON.parse(content);
+                if (parsedData.name) {
+                    db.run("INSERT INTO users (name) VALUES (?)", [parsedData.name], function() {
+                        socket.write(JSON.stringify({ statusCode: 200, data: { id: this.lastID, inserted: parsedData } }) + '\n');
+                    });
+                } else if (parsedData.item) {
+                    db.run("INSERT INTO items (item) VALUES (?)", [parsedData.item], function() {
+                        socket.write(JSON.stringify({ statusCode: 200, data: { id: this.lastID, inserted: parsedData } }) + '\n');
+                    });
+                } else if (parsedData.action) {
+                    db.run("INSERT INTO logs (action) VALUES (?)", [parsedData.action], function() {
+                        socket.write(JSON.stringify({ statusCode: 200, data: { id: this.lastID, inserted: parsedData } }) + '\n');
+                    });
+                } else {
+                    socket.write(JSON.stringify({ statusCode: 400, error: "Elemento no reconocido" }) + '\n');
+                }
+            } catch (e) {
+                socket.write(JSON.stringify({ statusCode: 400, error: "JSON inválido" }) + '\n');
+            }
+        } 
+        // Formato: {get:<element>}
+        else if (message.startsWith('{get:') && message.endsWith('}')) {
+            const tableName = message.slice(5, -1).trim();
+            if (['users', 'items', 'logs'].includes(tableName)) {
+                db.all(`SELECT * FROM ${tableName}`, (err, rows) => {
+                    if (err) {
+                        socket.write(JSON.stringify({ statusCode: 500, error: err.message }) + '\n');
+                    } else {
+                        socket.write(JSON.stringify({ statusCode: 200, data: rows }) + '\n');
+                    }
+                });
+            } else {
+                socket.write(JSON.stringify({ statusCode: 404, error: "Tabla no encontrada" }) + '\n');
+            }
+        } else {
+            socket.write(JSON.stringify({ statusCode: 400, error: "Formato no válido. Use {insert:<element>} o {get:<element>}" }) + '\n');
+        }
+    });
+
+    socket.on('error', (err) => {
+        console.log(`Error en Socket TCP: ${err.message}`);
+    });
+});
+
+tcpServer.listen(6061, () => {
+    console.log('Servidor TCP Socket escuchando en puerto 6061');
+});
