@@ -10,6 +10,5 @@ Este proyecto implementa una API REST desarrollada en Node.js (Express) con base
 
 ## Pasos de Configuración de CI/CD
 El archivo `.github/workflows/main.yml` realiza las siguientes etapas:
-1. **Testing:** Ejecuta Jest para validar los 10 endpoints con la BD en memoria.
+1. **Testing:** Ejecuta Jest para validar los 15 endpoints con la BD en memoria.
 2. **Build & Push:** Empaqueta la imagen y la envía a Docker Hub usando los tags `latest` y el SHA del commit.
-3. **Deploy:** Se conecta mediante SSH a la instancia EC2, detiene la versión anterior y levanta el nuevo contenedor exponiendo los puertos 80 y 6061.3. **Deploy:** Se conecta mediante SSH a la instancia EC2, detiene la versión anterior y levanta el nuevo contenedor exponiendo los puertos 80 y 6061.
