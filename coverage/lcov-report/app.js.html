@@ -329,7 +329,7 @@ app.post('/logs', (req, res) =&gt; {
 app.post('/backup', (req, res) =&gt; {
   try {
     fs.copyFileSync('./data.sqlite', './backup.sqlite');
-<span class="cstat-no" title="statement not covered" >    response(res, { message: 'Backup ejecutado con éxito en CI/CD' });</span>
+<span class="cstat-no" title="statement not covered" >    response(res, { message: 'Ejemplo, Backup exitoso' });</span>
   } catch (e) {
     error(res, 'No se pudo generar el backup', 500);
   }

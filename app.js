@@ -74,7 +74,7 @@ app.post('/logs', (req, res) => {
 app.post('/backup', (req, res) => {
   try {
     fs.copyFileSync('./data.sqlite', './backup.sqlite');
-    response(res, { message: 'Backup ejecutado con éxito en CI/CD' });
+    response(res, { message: 'Ejemplo, Backup exitoso' });
   } catch (e) {
     error(res, 'No se pudo generar el backup', 500);
   }
