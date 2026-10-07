@@ -56,7 +56,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo docker pull ${{ secrets.DOCKER_USERNAME }}/webapp:latest
+            sudo docker pull ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
             sudo docker stop webapp-container || true
             sudo docker rm webapp-container || true
-            sudo docker run -d -p 80:80 -p 6061:6061 --name webapp-container ${{ secrets.DOCKER_USERNAME }}/webapp:latest
+            sudo docker run -d -p 80:80 -p 6061:6061 --name webapp-container ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
