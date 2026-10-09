@@ -23,7 +23,7 @@ const validText = (v) => typeof v === 'string' && v.trim() !== '';
 const crud = (route, table, col) => {
   app.get(`/${route}`, (req, res) =>
     db.all(`SELECT * FROM ${table}`, (err, rows) =>
-      err ? error(res, err.message, 500) : response(res, rows)));
+      err ? error(res, err.message, 500) : response(res, { id: this.lastID }, 202)));
 
   app.get(`/${route}/:id`, (req, res) => {
     if (!validId(req.params.id)) return error(res, 'ID inválido', 400);
