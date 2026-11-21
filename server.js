@@ -1,7 +1,9 @@
 import net from 'net';
 import { app, db } from './app.js';
 
-app.listen(80, () => console.log('Servidor HTTP en puerto 80'));
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => console.log(`Servidor HTTP en puerto ${PORT}`));
 
 // --- Servidor TCP Socket en puerto 6061 ---
 const tcpServer = net.createServer((socket) => {
@@ -9,9 +11,7 @@ const tcpServer = net.createServer((socket) => {
 
     socket.on('data', (data) => {
         const message = data.toString().trim();
-        console.log(`Mensaje recibido: ${message}`);
 
-        // Formato: {insert:<element>}
         if (message.startsWith('{insert:') && message.endsWith('}')) {
             const content = message.slice(8, -1).trim();
             try {
@@ -35,7 +35,6 @@ const tcpServer = net.createServer((socket) => {
                 socket.write(JSON.stringify({ statusCode: 400, error: "JSON inválido" }) + '\n');
             }
         }
-        // Formato: {get:<element>}
         else if (message.startsWith('{get:') && message.endsWith('}')) {
             const tableName = message.slice(5, -1).trim();
             if (['users', 'items', 'logs'].includes(tableName)) {
@@ -50,7 +49,7 @@ const tcpServer = net.createServer((socket) => {
                 socket.write(JSON.stringify({ statusCode: 404, error: "Tabla no encontrada" }) + '\n');
             }
         } else {
-            socket.write(JSON.stringify({ statusCode: 400, error: "Formato no válido. Use {insert:<element>} o {get:<element>}" }) + '\n');
+            socket.write(JSON.stringify({ statusCode: 400, error: "Formato no válido" }) + '\n');
         }
     });
 

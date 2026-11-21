@@ -9,6 +9,16 @@ afterAll((done) => {
   db.close(done);
 });
 
+describe('HEALTH CHECK', () => {
+  test('GET /health responde 200 y status OK con hora de México', async () => {
+    const res = await request(app).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('OK');
+    expect(res.body.database).toBe('connected');
+    expect(res.body.timestamp).toBeDefined();
+  });
+});
+
 describe('USERS', () => {
   test('POST /users crea un usuario (201)', async () => {
     const res = await request(app).post('/users').send({ name: 'Ana' });
@@ -160,7 +170,7 @@ describe('TRUNCATE', () => {
 });
 
 describe('BACKUP', () => {
-    test('POST /backup responde 200 o 500 según exista data.sqlite', async () => {
+  test('POST /backup responde 200 o 500 según exista data.sqlite', async () => {
     const res = await request(app).post('/backup');
     expect([200, 500]).toContain(res.status);
   });
@@ -170,9 +180,9 @@ describe('BACKUP', () => {
     const res = await request(app).get('/backup/download');
     expect([200, 404]).toContain(res.status);
   });
-  
+
   test('GET /backup/download sin backup previo -> 404', async () => {
     const res = await request(app).get('/backup/download');
-    expect([404, 200]).toContain(res.status); // 200 si ya existía un backup.sqlite
+    expect([404, 200]).toContain(res.status);
   });
 });

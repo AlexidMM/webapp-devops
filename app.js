@@ -6,8 +6,32 @@ import path from 'path';
 const sql = sqlite3.verbose();
 export const db = new sql.Database(process.env.DB_PATH || './data.sqlite');
 export const app = express();
-app.use(express.json());
 
+app.use(express.json());
+app.use(express.static('public'));
+
+// Middleware de Trazabilidad y Medición para OpenObserve / Logs
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const responseTime = Date.now() - start;
+    const timestampMx = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+    
+    const logData = {
+      timestamp: timestampMx,
+      method: req.method,
+      url: req.originalUrl,
+      statusCode: res.statusCode,
+      responseTime: `${responseTime}ms`
+    };
+
+    // Guardar en consola para ser capturado por Docker / OpenTelemetry
+    console.log(JSON.stringify(logData));
+  });
+  next();
+});
+
+// Inicialización de Tablas
 db.serialize(() => {
   db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)");
   db.run("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, item TEXT)");
@@ -18,6 +42,26 @@ const response = (res, data, code = 200) => res.status(code).json({ statusCode: 
 const error = (res, msg, code) => res.status(code).json({ statusCode: code, error: msg });
 const validId = (id) => Number.isInteger(Number(id)) && Number(id) > 0;
 const validText = (v) => typeof v === 'string' && v.trim() !== '';
+
+// ==========================================
+// ENDPOINT DE SALUD (HEALTH CHECK)
+// ==========================================
+app.get('/health', (req, res) => {
+  db.get("SELECT 1", (err) => {
+    const timestampMx = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+    if (err) {
+      return error(res, 'Base de datos no disponible', 500);
+    }
+    res.status(200).json({
+      statusCode: 200,
+      status: 'OK',
+      service: 'webapp-devops-api',
+      uptime: `${process.uptime().toFixed(2)}s`,
+      timestamp: timestampMx,
+      database: 'connected'
+    });
+  });
+});
 
 // CRUD genérico para users (name) e items (item)
 const crud = (route, table, col) => {
@@ -60,9 +104,10 @@ const crud = (route, table, col) => {
 crud('users', 'users', 'name');
 crud('items', 'items', 'item');
 
-// Logs (solo GET y POST)
+// Logs
 app.get('/logs', (req, res) =>
   db.all("SELECT * FROM logs", (err, rows) => err ? error(res, err.message, 500) : response(res, rows)));
+
 app.post('/logs', (req, res) => {
   if (!validText(req.body.action)) return error(res, 'El campo "action" es obligatorio', 400);
   db.run("INSERT INTO logs (action) VALUES (?)", [req.body.action], function (err) {
@@ -74,13 +119,13 @@ app.post('/logs', (req, res) => {
 app.post('/backup', (req, res) => {
   try {
     fs.copyFileSync('./data.sqlite', './backup.sqlite');
-    response(res, { message: 'Ejemplo, Backup exitoso' });
+    response(res, { message: 'Backup exitoso' });
   } catch (e) {
     error(res, 'No se pudo generar el backup', 500);
   }
 });
 
-// Backup: descarga el archivo a tu PC
+// Backup: descarga el archivo
 app.get('/backup/download', (req, res) => {
   const file = path.resolve('./backup.sqlite');
   if (!fs.existsSync(file)) return error(res, 'Primero genera un backup con POST /backup', 404);
@@ -92,5 +137,5 @@ app.delete('/truncate', (req, res) => {
     err ? error(res, err.message, 500) : response(res, { message: 'Base de datos vaciada' }));
 });
 
-// JSON mal formado
+// Manejo de JSON mal formado
 app.use((err, req, res, next) => error(res, 'JSON inválido', 400));
