@@ -258,4 +258,31 @@ test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
     await page.click('#btn-login');
 
     await expect(page.locator('#btn-logout')).toBeVisible();
-    await expect(page.locator('#btn-logout')).toHaveText('Cerr
+        await expect(page.locator('#btn-logout')).toHaveText('Cerrar Sesión');
+  });
+
+  test('24. La insignia de salud cambia a estilo verde cuando /health responde OK', async ({ page }) => {
+    await page.fill('#login-username', 'admin');
+    await page.fill('#login-password', 'admin123');
+    await page.click('#btn-login');
+
+    const badge = page.locator('#health-status');
+    await expect(badge).toContainText('Sistema Activo');
+    await expect(badge).toHaveClass(/bg-green-100/);
+  });
+
+  test('25. La gráfica refleja 1 usuario y 1 producto tras registrarlos', async ({ page }) => {
+    await page.fill('#login-username', 'admin');
+    await page.fill('#login-password', 'admin123');
+    await page.click('#btn-login');
+
+    await page.fill('#input-user-name', 'Usuario Gráfica');
+    await page.click('#btn-add-user');
+    await page.fill('#input-item-name', 'Producto Gráfica');
+    await page.click('#btn-add-item');
+    await expect(page.locator('#items-list li')).toHaveCount(1);
+
+    const datos = await page.evaluate(() => Chart.getChart('metricsChart').data.datasets[0].data);
+    expect(datos).toEqual([1, 1]);
+  });
+});

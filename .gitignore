@@ -1,3 +1,6 @@
 node_modules
 *.sqlite
-.envcoverage/
+.env
+coverage/
+test-results/
+playwright-report/

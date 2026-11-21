@@ -2,7 +2,7 @@ import request from 'supertest';
 import { app, db } from '../app.js';
 
 beforeEach((done) => {
-  db.exec("DELETE FROM users; DELETE FROM items; DELETE FROM logs;", done);
+  db.exec('DELETE FROM users; DELETE FROM items; DELETE FROM logs;', done);
 });
 
 afterAll((done) => {
@@ -10,68 +10,76 @@ afterAll((done) => {
 });
 
 describe('HEALTH CHECK', () => {
-  test('GET /health responde 200 y status OK con hora de México', async () => {
+  test('GET /health responde 200, status OK, base conectada y hora de México', async () => {
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('OK');
     expect(res.body.database).toBe('connected');
+    expect(res.body.service).toBe('webapp-devops-api');
     expect(res.body.timestamp).toBeDefined();
   });
 });
 
 describe('USERS', () => {
-  test('POST /users crea un usuario (201)', async () => {
+  test('POST /users con name válido responde 201 y devuelve el id creado', async () => {
     const res = await request(app).post('/users').send({ name: 'Ana' });
     expect(res.status).toBe(201);
     expect(res.body.data.id).toBeDefined();
   });
 
-  test('POST /users sin name -> 400', async () => {
+  test('POST /users sin el campo name responde 400', async () => {
     const res = await request(app).post('/users').send({});
     expect(res.status).toBe(400);
   });
 
-  test('POST /users con name vacío o solo espacios -> 400', async () => {
+  test('POST /users sin body ni Content-Type responde 400 y no revienta con 500', async () => {
+    const res = await request(app).post('/users');
+    expect(res.status).toBe(400);
+  });
+
+  test('POST /users con name de solo espacios responde 400', async () => {
     const res = await request(app).post('/users').send({ name: '   ' });
     expect(res.status).toBe(400);
   });
 
-  test('POST /users con name numérico -> 400', async () => {
+  test('POST /users con name numérico responde 400', async () => {
     const res = await request(app).post('/users').send({ name: 123 });
     expect(res.status).toBe(400);
   });
 
-  test('POST /users con JSON inválido -> 400', async () => {
+  test('POST /users con JSON mal formado responde 400 "JSON inválido"', async () => {
     const res = await request(app).post('/users')
       .set('Content-Type', 'application/json').send('{"name": ');
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe('JSON inválido');
   });
 
-  test('GET /users devuelve la lista', async () => {
+  test('GET /users devuelve exactamente los usuarios insertados', async () => {
     await request(app).post('/users').send({ name: 'Ana' });
     const res = await request(app).get('/users');
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].name).toBe('Ana');
   });
 
-  test('GET /users/:id existente (200)', async () => {
+  test('GET /users/:id existente devuelve 200 con el nombre correcto', async () => {
     const { body } = await request(app).post('/users').send({ name: 'Luis' });
     const res = await request(app).get(`/users/${body.data.id}`);
     expect(res.status).toBe(200);
     expect(res.body.data.name).toBe('Luis');
   });
 
-  test('GET /users/:id inexistente -> 404', async () => {
+  test('GET /users/:id inexistente responde 404', async () => {
     const res = await request(app).get('/users/9999');
     expect(res.status).toBe(404);
   });
 
-  test('GET /users/:id con id no numérico -> 400', async () => {
+  test('GET /users/:id con id no numérico ("abc") responde 400', async () => {
     const res = await request(app).get('/users/abc');
     expect(res.status).toBe(400);
   });
 
-  test('PUT /users/:id actualiza (200)', async () => {
+  test('PUT /users/:id actualiza el nombre y el cambio persiste (200)', async () => {
     const { body } = await request(app).post('/users').send({ name: 'Old' });
     const res = await request(app).put(`/users/${body.data.id}`).send({ name: 'New' });
     expect(res.status).toBe(200);
@@ -79,18 +87,23 @@ describe('USERS', () => {
     expect(check.body.data.name).toBe('New');
   });
 
-  test('PUT /users/:id inexistente -> 404', async () => {
+  test('PUT /users/:id inexistente responde 404', async () => {
     const res = await request(app).put('/users/9999').send({ name: 'X' });
     expect(res.status).toBe(404);
   });
 
-  test('PUT /users/:id sin body -> 400', async () => {
+  test('PUT /users/:id con body vacío responde 400', async () => {
     const { body } = await request(app).post('/users').send({ name: 'A' });
     const res = await request(app).put(`/users/${body.data.id}`).send({});
     expect(res.status).toBe(400);
   });
 
-  test('DELETE /users/:id elimina (200) y ya no existe', async () => {
+  test('PUT /users/:id con id no numérico responde 400', async () => {
+    const res = await request(app).put('/users/abc').send({ name: 'X' });
+    expect(res.status).toBe(400);
+  });
+
+  test('DELETE /users/:id elimina el registro (200) y luego GET responde 404', async () => {
     const { body } = await request(app).post('/users').send({ name: 'Del' });
     const res = await request(app).delete(`/users/${body.data.id}`);
     expect(res.status).toBe(200);
@@ -98,91 +111,105 @@ describe('USERS', () => {
     expect(check.status).toBe(404);
   });
 
-  test('DELETE /users/:id inexistente -> 404', async () => {
+  test('DELETE /users/:id inexistente responde 404', async () => {
     const res = await request(app).delete('/users/9999');
     expect(res.status).toBe(404);
   });
 
-  test('DELETE /users/:id inválido -> 400', async () => {
+  test('DELETE /users/:id con id negativo (-5) responde 400', async () => {
     const res = await request(app).delete('/users/-5');
     expect(res.status).toBe(400);
   });
 });
 
-describe('ITEMS', () => {
-  test('POST /items crea item (201)', async () => {
+describe('ITEMS (PRODUCTOS)', () => {
+  test('POST /items con campo item válido responde 201', async () => {
     const res = await request(app).post('/items').send({ item: 'Laptop' });
     expect(res.status).toBe(201);
   });
 
-  test('POST /items sin campo item -> 400', async () => {
+  test('POST /items con campo equivocado (name en lugar de item) responde 400', async () => {
     const res = await request(app).post('/items').send({ name: 'mal campo' });
     expect(res.status).toBe(400);
   });
 
-  test('GET /items devuelve lista', async () => {
+  test('GET /items devuelve el producto insertado', async () => {
     await request(app).post('/items').send({ item: 'Mouse' });
     const res = await request(app).get('/items');
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].item).toBe('Mouse');
   });
 
-  test('PUT /items/:id actualiza', async () => {
+  test('GET /items/:id inexistente responde 404', async () => {
+    const res = await request(app).get('/items/777');
+    expect(res.status).toBe(404);
+  });
+
+  test('PUT /items/:id actualiza el producto y el cambio persiste', async () => {
     const { body } = await request(app).post('/items').send({ item: 'A' });
     const res = await request(app).put(`/items/${body.data.id}`).send({ item: 'B' });
     expect(res.status).toBe(200);
+    const check = await request(app).get(`/items/${body.data.id}`);
+    expect(check.body.data.item).toBe('B');
   });
 
-  test('DELETE /items/:id inexistente -> 404', async () => {
+  test('DELETE /items/:id inexistente responde 404', async () => {
     const res = await request(app).delete('/items/12345');
     expect(res.status).toBe(404);
   });
 });
 
 describe('LOGS', () => {
-  test('POST /logs crea log (201)', async () => {
+  test('POST /logs con action válida responde 201', async () => {
     const res = await request(app).post('/logs').send({ action: 'login' });
     expect(res.status).toBe(201);
   });
 
-  test('POST /logs sin action -> 400', async () => {
+  test('POST /logs sin action responde 400', async () => {
     const res = await request(app).post('/logs').send({});
     expect(res.status).toBe(400);
   });
 
-  test('GET /logs devuelve lista', async () => {
+  test('GET /logs devuelve el log insertado', async () => {
     await request(app).post('/logs').send({ action: 'x' });
     const res = await request(app).get('/logs');
     expect(res.body.data).toHaveLength(1);
   });
 });
 
+describe('RUTAS NO EXISTENTES', () => {
+  test('GET /ruta-inventada responde 404 con mensaje "Ruta no encontrada"', async () => {
+    const res = await request(app).get('/ruta-inventada');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('Ruta no encontrada');
+  });
+});
+
 describe('TRUNCATE', () => {
-  test('DELETE /truncate vacía todas las tablas', async () => {
+  test('DELETE /truncate vacía las tres tablas (users, items y logs)', async () => {
     await request(app).post('/users').send({ name: 'A' });
     await request(app).post('/items').send({ item: 'B' });
     await request(app).post('/logs').send({ action: 'C' });
+
     const res = await request(app).delete('/truncate');
     expect(res.status).toBe(200);
-    const users = await request(app).get('/users');
-    expect(users.body.data).toHaveLength(0);
+
+    expect((await request(app).get('/users')).body.data).toHaveLength(0);
+    expect((await request(app).get('/items')).body.data).toHaveLength(0);
+    expect((await request(app).get('/logs')).body.data).toHaveLength(0);
   });
 });
 
 describe('BACKUP', () => {
-  test('POST /backup responde 200 o 500 según exista data.sqlite', async () => {
+  test('POST /backup responde 200 (archivo existe) o 500 (BD en memoria)', async () => {
     const res = await request(app).post('/backup');
     expect([200, 500]).toContain(res.status);
   });
 
-  test('GET /backup/download tras generar backup', async () => {
+  test('GET /backup/download responde 200 si hay respaldo o 404 si no existe', async () => {
     await request(app).post('/backup');
     const res = await request(app).get('/backup/download');
     expect([200, 404]).toContain(res.status);
-  });
-
-  test('GET /backup/download sin backup previo -> 404', async () => {
-    const res = await request(app).get('/backup/download');
-    expect([404, 200]).toContain(res.status);
   });
 });

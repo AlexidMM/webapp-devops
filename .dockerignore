@@ -1,6 +1,11 @@
 node_modules
-.git
-*.sqlite
-.env
-*.log
 coverage
+test
+e2e
+test-results
+playwright-report
+.git
+.github
+*.sqlite
+*.md
+server.js-viejo.txt
