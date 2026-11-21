@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
 
   test.beforeEach(async ({ page, request }) => {
-    // Vacia la base de datos antes de cada prueba para garantizar estado limpio
+    // Vacía la base de datos antes de cada prueba para garantizar estado limpio
     await request.delete('/truncate');
     await page.goto('/');
   });
@@ -101,10 +101,15 @@ test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
     await page.fill('#login-password', 'admin123');
     await page.click('#btn-login');
 
+    // Inserción 1
     await page.fill('#input-user-name', 'Usuario Uno');
     await page.click('#btn-add-user');
+    await expect(page.locator('#users-list')).toContainText('Usuario Uno');
+
+    // Inserción 2
     await page.fill('#input-user-name', 'Usuario Dos');
     await page.click('#btn-add-user');
+    await expect(page.locator('#users-list')).toContainText('Usuario Dos');
 
     const items = page.locator('#users-list li');
     await expect(items).toHaveCount(2);
@@ -117,6 +122,7 @@ test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
 
     await page.fill('#input-user-name', 'Usuario A Borrar');
     await page.click('#btn-add-user');
+    await expect(page.locator('#users-list')).toContainText('Usuario A Borrar');
 
     await page.click('#users-list li:has-text("Usuario A Borrar") button');
     await expect(page.locator('#users-list')).not.toContainText('Usuario A Borrar');
@@ -172,10 +178,15 @@ test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
     await page.fill('#login-password', 'admin123');
     await page.click('#btn-login');
 
+    // Inserción 1
     await page.fill('#input-item-name', 'Producto A');
     await page.click('#btn-add-item');
+    await expect(page.locator('#items-list')).toContainText('Producto A');
+
+    // Inserción 2
     await page.fill('#input-item-name', 'Producto B');
     await page.click('#btn-add-item');
+    await expect(page.locator('#items-list')).toContainText('Producto B');
 
     const items = page.locator('#items-list li');
     await expect(items).toHaveCount(2);
@@ -188,6 +199,7 @@ test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
 
     await page.fill('#input-item-name', 'Item Temporal');
     await page.click('#btn-add-item');
+    await expect(page.locator('#items-list')).toContainText('Item Temporal');
 
     await page.click('#items-list li:has-text("Item Temporal") button');
     await expect(page.locator('#items-list')).not.toContainText('Item Temporal');
@@ -246,32 +258,4 @@ test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
     await page.click('#btn-login');
 
     await expect(page.locator('#btn-logout')).toBeVisible();
-    await expect(page.locator('#btn-logout')).toHaveText('Cerrar Sesión');
-  });
-
-  test('24. Actualización dinámica del DOM al alternar entre crear y eliminar registros', async ({ page }) => {
-    await page.fill('#login-username', 'admin');
-    await page.fill('#login-password', 'admin123');
-    await page.click('#btn-login');
-
-    // Agregar usuario y producto
-    await page.fill('#input-user-name', 'Prueba Dinámica');
-    await page.click('#btn-add-user');
-    await page.fill('#input-item-name', 'Item Dinámico');
-    await page.click('#btn-add-item');
-
-    await expect(page.locator('#users-list')).toContainText('Prueba Dinámica');
-    await expect(page.locator('#items-list')).toContainText('Item Dinámico');
-
-    // Eliminar ambos
-    await page.click('#users-list li:has-text("Prueba Dinámica") button');
-    await page.click('#items-list li:has-text("Item Dinámico") button');
-
-    await expect(page.locator('#users-list')).not.toContainText('Prueba Dinámica');
-    await expect(page.locator('#items-list')).not.toContainText('Item Dinámico');
-  });
-
-  test('25. Verificación de título de pestaña del navegador', async ({ page }) => {
-    await expect(page).toHaveTitle('WebApp DevOps - Dashboard');
-  });
-});
+    await expect(page.locator('#btn-logout')).toHaveText('Cerr
