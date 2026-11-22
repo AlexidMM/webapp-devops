@@ -70,9 +70,10 @@ jobs:
             --arg commit_sha "$COMMIT" --arg actor "$ACTOR" --arg branch "$BRANCH" \
             --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" \
             --arg timestamp "$(date -u +%FT%TZ)" \
+            --arg timestamp_mx "$(TZ=America/Mexico_City date +%FT%T)" \
             '[{event:$event, status:$status, jest:$jest, playwright:$playwright,
                commit_sha:$commit_sha, actor:$actor, branch:$branch,
-               run_id:$run_id, run_url:$run_url, timestamp:$timestamp}]' > /tmp/o2-test-event.json
+               run_id:$run_id, run_url:$run_url, timestamp:$timestamp, timestamp_mx:$timestamp_mx}]' > /tmp/o2-test-event.json
           if curl -sf --connect-timeout 5 --max-time 15 -X POST \
             "$OO_URL/api/default/pipeline_logs/_json" \
             -H "Content-Type: application/json" \
@@ -265,7 +266,7 @@ jobs:
             cat /tmp/health.out
 
             echo "=== Registrando despliegue ==="
-            OO_DEPLOY_PAYLOAD="[{\"event\":\"DEPLOYMENT_SUCCESSFUL\",\"status\":\"DEPLOYED\",\"image\":\"$IMAGE_TAG\",\"commit_sha\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
+            OO_DEPLOY_PAYLOAD="[{\"event\":\"DEPLOYMENT_SUCCESSFUL\",\"status\":\"DEPLOYED\",\"image\":\"$IMAGE_TAG\",\"commit_sha\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"timestamp\":\"$(date -u +%FT%TZ)\",\"timestamp_mx\":\"$(TZ=America/Mexico_City date +%FT%T)\"}]"
             OO_DEPLOY_CODE=$(curl -s -o /tmp/o2-deploy.out -w '%{http_code}' -X POST \
               "$OO_URL/api/default/pipeline_logs/_json" \
               -H "Content-Type: application/json" \

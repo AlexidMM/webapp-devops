@@ -98,7 +98,7 @@ Verificación:
 
 ```bash
 curl http://localhost/health
-curl http://localhost/api/users
+curl http://localhost/users
 docker logs --tail 100 webapp-container
 ```
 
