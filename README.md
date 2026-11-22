@@ -1,95 +1,132 @@
-# WebApp DevOps - CI/CD, pruebas y observabilidad
+# WebApp DevOps
 
 API REST + dashboard web desplegados en AWS EC2 con GitHub Actions, Docker Hub y OpenObserve.
 
-## Arquitectura
+## Estructura
 
+```text
+webapp-devops/
+├── app.js                     API Express: /health, /users, /items, /logs, /backup, /truncate, /stats/requests
+├── db.js                      SQLite instrumentado con OpenTelemetry
+├── logger.js                  logs JSON con trace_id / span_id
+├── instrumentation.js         exportadores OTLP (logs, métricas y trazas)
+├── server.js                  arranque HTTP (:3000) y socket TCP (:6061)
+├── public/index.html          login, CRUD y gráficas Chart.js
+├── test/api.test.js           34 pruebas Jest + Supertest
+├── e2e/app.spec.js            39 pruebas Playwright
+├── Dockerfile                 node:20-alpine + pnpm 12.4.2
+├── pnpm-workspace.yaml        allowBuilds para sqlite3 / protobufjs
+├── monitor/metrics.sh         métricas de EC2 -> infra_metrics
+├── openobserve/dashboard.json dashboard importable
+└── .github/workflows/main.yml CI, publicación y deploy
 ```
-Push a main/master
-  -> GitHub Actions: pnpm install -> Jest (backend) -> Playwright (frontend)
-  -> si falla: POST a OpenObserve (TESTS_FAILED) y NO hay SSH a EC2
-  -> si pasa: POST (TESTS_PASSED) -> Docker Hub -> SSH a EC2 -> deploy
-  -> EC2: OpenObserve + webapp (OTLP) + cron de métricas (infra_metrics)
-```
 
-- **Backend:** Express 5 + SQLite (`app.js`, `db.js`, `server.js`). Endpoints: `/health`, CRUD `/users`, CRUD `/items`, `/logs`, `/backup`, `/truncate`, `/stats/requests`; además un socket TCP en el puerto 6061.
-- **Frontend:** `public/index.html` (login, CRUD de usuarios y productos, gráficas Chart.js y tabla de peticiones con hora de México).
-- **Contenedores:** `Dockerfile` basado en `node:20-alpine`, pnpm 12.4.2 (misma versión de `packageManager`), arranca con `--import ./instrumentation.js`.
-- **Observabilidad:** OpenTelemetry envía logs, métricas y trazas por OTLP/HTTP a OpenObserve; un script de cron envía métricas de la EC2.
+## Código
 
-## Pruebas automatizadas
+- **Backend:** Express 5 + SQLite. `app.js` registra middleware de métricas (`http_requests_total`, `http_errors_total`, `http_request_duration_ms`) y un log estructurado por petición. `db.js` crea spans para cada consulta.
+- **Frontend:** `public/index.html` usa la API y muestra datos con Chart.js. La tabla de peticiones usa hora de `America/Mexico_City`.
+- **Observabilidad:** `instrumentation.js` envía por OTLP/HTTP a `http://<host>:5080/api/default`. Si faltan las variables `OTEL_*`, la instrumentación se desactiva y la app sigue funcionando. `monitor/metrics.sh` envía CPU, RAM, red, temperatura, disco y host cada minuto.
+- **Pruebas:** Jest cubre el backend; Playwright cubre el frontend levantando el servidor con `DB_PATH=:memory:`. No se generan reportes HTML/PDF: el registro de ejecuciones vive en el stream `pipeline_logs`.
 
-| Suite | Comando | Cobertura |
-|---|---|---|
-| Backend (Jest + Supertest) | `pnpm test` | 34 pruebas: health, validaciones y CRUD de users/items/logs, backups, truncate, stats y rutas 404. |
-| Frontend (Playwright) | `pnpm test:e2e` | 39 pruebas: 7 de login/sesión, 11 de usuarios, 9 de productos, 12 de dashboard/gráficas/tabla de peticiones. |
+## Flujo de CI/CD
 
-Cada prueba tiene un nombre descriptivo de la conducta verificada. Playwright levanta el servidor con `DB_PATH=:memory:` y cada caso limpia la BD con `DELETE /truncate`, por lo que no afectan los datos reales. El proyecto es JavaScript: Jest cubre el backend y Playwright el frontend (no se usa pytest porque no hay código Python).
+1. Push a `main`/`master` → `pnpm install`, Jest y Playwright.
+2. El resultado se envía a `pipeline_logs`. Si hay fallo, **no se hace SSH** a EC2.
+3. Si pasa: build/push a Docker Hub (tags `latest` y SHA).
+4. El job `deploy` levanta OpenObserve, reemplaza el contenedor de la app, instala el cron de métricas, valida `/health` y registra `DEPLOYMENT_SUCCESSFUL`.
 
-No se genera reporte HTML/PDF de Playwright: el reporter es solo `list` y `trace`/`screenshot`/`video` están desactivados. La trazabilidad de ejecuciones vive en el stream `pipeline_logs` de OpenObserve.
-
-## Secretos configurados en GitHub (Settings > Secrets and variables > Actions)
+## Secretos de GitHub
 
 | Secreto | Uso |
 |---|---|
-| `EC2_HOST` | IP/dominio de la instancia AWS EC2 (Ubuntu). |
-| `EC2_SSH_KEY` | Llave privada SSH (usuario `ubuntu`). |
+| `EC2_HOST` | IP o dominio de la instancia EC2 (Ubuntu). |
+| `EC2_SSH_KEY` | Llave privada SSH del usuario `ubuntu`. |
 | `DOCKER_USERNAME` / `DOCKER_PASSWORD` | Docker Hub. |
-| `OPENOBSERVE_USER` / `OPENOBSERVE_PASS` | Email y contraseña del usuario root de OpenObserve. |
-| `OPENOBSERVE_URL` | Opcional: URL pública de OpenObserve para el runner (ej. `http://IP:5080`). Por defecto `http://EC2_HOST:5080`. Dentro de la EC2 el pipeline usa `http://localhost:5080`. |
+| `OPENOBSERVE_USER` | Email del usuario root de OpenObserve. |
+| `OPENOBSERVE_PASS` | Contraseña root. Si no cumple la política de OpenObserve (8-128 caracteres, mayúscula, minúscula, dígito y símbolo), el pipeline añade el sufijo `Aa1!Aa1!` automáticamente. |
+| `OPENOBSERVE_URL` | Opcional. URL pública para el runner; por defecto `http://EC2_HOST:5080`. |
 
-Si OpenObserve solo escucha en `localhost`, el pipeline necesita `OPENOBSERVE_URL` accesible desde el runner o abrir el puerto TCP 5080 en el Security Group de EC2. Si el `curl` del runner termina con `exit code 28` (timeout), ese es el motivo: el evento no se registra, pero ese paso usa `continue-on-error` y no cancela el job. En el deploy dentro de la EC2, un `exit code 22` significa respuesta HTTP 4xx/5xx; los mensajes `=== Verificando ... ===` indican qué check falló.
+Abrir el puerto TCP `5080` en el Security Group para ver OpenObserve y para que el runner publique los eventos.
 
-## Flujo del pipeline (`.github/workflows/main.yml`)
+## Descargar y ejecutar en una EC2
 
-1. `pnpm/action-setup@v4` **sin** `version:`: toma `pnpm@12.4.2` desde `package.json`. Declarar `version: 9` provoca `ERR_PNPM_BAD_PM_VERSION`; el Dockerfile también usa 12.4.2.
-2. Jest y Playwright. Con `if: always()` se envía el resultado a `pipeline_logs`, incluso si hay fallo, mediante HTTP directo (sin SSH).
-3. Solo con `success()` y `event_name == push`: login/build/push a Docker Hub con tags `latest` y SHA del commit.
-4. El job `deploy` (que depende del anterior) copia `monitor/metrics.sh`, levanta OpenObserve si hace falta, reemplaza el contenedor de la app, instala el cron y verifica `GET /health` antes de registrar `DEPLOYMENT_SUCCESSFUL`.
-
-## OpenObserve en sencillo
-
-OpenObserve es un backend de observabilidad: recibe **logs**, **métricas** y **trazas** por OTLP y los guarda en *streams* (como tablas). Se consulta desde su UI con SQL o PromQL y se visualiza en dashboards.
-
-- UI: `http://<EC2_HOST>:5080` (usuario root = `OPENOBSERVE_USER`).
-- Logs y trazas de la app: `POST /api/default/v1/logs` y `/v1/traces` (`instrumentation.js` envía cabecera `stream-name` → `app_logs` y `app_traces`). Las trazas se ven en **Traces** y permiten seguir la petición HTTP, el span de Express y las consultas SQLite instrumentadas en `db.js`. Los logs incluyen `trace_id`/`span_id` para correlacionarlos.
-- Métricas de la app: `/api/default/v1/metrics`. OpenObserve crea un stream por métrica: `http_requests_total`, `http_errors_total` y `http_request_duration_ms` (latencia), con atributos `method`, `route`, `status_code`.
-- Eventos CI/CD: `POST /api/default/pipeline_logs/_json` con `event`, `status`, `commit_sha`, `actor`, `branch` y timestamp.
-- Infraestructura: `POST /api/default/infra_metrics/_json` cada minuto con `cpu_percent`, `ram_percent`, `network_bps`, `temperature_c`, `disk_used_percent`, `host` y `timestamp_mx`.
-
-**Dashboard:** en *Dashboards > Import* sube `openobserve/dashboard.json`. Tiene 3 pestañas: CI/CD, Aplicación (OTLP) e Infraestructura EC2. Las horas se muestran en formato de México (`timestamp_mx`, `America/Mexico_City`).
-
-**Alertas sugeridas** (UI > Alerts > New):
-- `TESTS_FAILED` en `pipeline_logs` en los últimos 5 min → incidente de CI.
-- `status_code >= 500` en `app_logs` en 5 min → error de aplicación.
-- `cpu_percent > 85` o `ram_percent > 90` en `infra_metrics` durante 5 min → saturación de EC2.
-- Caída de `DEPLOYMENT_SUCCESSFUL` tras un `TESTS_PASSED` → revisar el job de deploy.
-
-> Nota: las instancias EC2 no exponen sensor térmico al sistema operativo. Si no existe `thermal_zone0` ni `hwmon`, el script reporta `temperature_c = 0` (sin dato), no un valor inventado.
-
-## Troubleshooting en EC2
-
-- `exit code 22` en el deploy: `curl` recibió HTTP 4xx/5xx. El log marca si fue `Verificando OpenObserve`, `Verificando health` o `Registrando despliegue`; en cada caso se muestra el código y el cuerpo devueltos.
-- `code=401` en `Verificando OpenObserve`: los secrets no coinciden con el usuario root guardado en `openobserve_data` (OpenObserve solo aplica `ZO_ROOT_USER_*` al crear el volumen). El pipeline elimina y recrea ese volumen con los secretos actuales; **se pierden los datos previos de OpenObserve**. Si quieres conservarlos, actualiza la contraseña root desde la UI antes de cambiar el secret.
-- `exit code 28`: timeout de conexión. En el runner significa que el puerto 5080 no es alcanzable; dentro de la EC2 significa que OpenObserve no levantó.
-- `no space left on device`: el pipeline ya limpia imágenes y build cache sin borrar `openobserve_data`. Si vuelve a aparecer, amplía el volumen EBS.
-
-Comandos manuales en la EC2 (las credenciales están en `/opt/monitor/oo.env`):
+Requisitos: Ubuntu, Docker, Git y acceso SSH.
 
 ```bash
-sudo cat /opt/monitor/oo.env
-curl -i http://127.0.0.1/health
-sudo docker logs --tail 100 webapp-container
-sudo docker logs --tail 50 openobserve
-sudo ss -ltnp | grep -E ':80|:5080'
-df -h /
+sudo apt update
+sudo apt install -y docker.io git curl
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER && newgrp docker
+
+git clone <URL_DEL_REPO> webapp-devops
+cd webapp-devops
+docker build -t webapp-devops .
 ```
 
-## Ejecución local
+Sin observabilidad:
+
+```bash
+docker run -d --name webapp-container \
+  -p 80:3000 -p 6061:6061 \
+  -e DB_PATH=/app/data/data.sqlite \
+  -v webapp_data:/app/data \
+  --restart always webapp-devops
+```
+
+Con observabilidad (OpenObserve ya corriendo en la misma EC2):
+
+```bash
+docker run -d --name openobserve -p 5080:5080 \
+  -e ZO_ROOT_USER_EMAIL="admin@example.com" \
+  -e ZO_ROOT_USER_PASSWORD="Password1!" \
+  -v openobserve_data:/data --restart always \
+  openobserve/openobserve:latest
+
+docker run -d --name webapp-container \
+  --add-host=host.docker.internal:host-gateway \
+  -p 80:3000 -p 6061:6061 \
+  -e PORT=3000 \
+  -e DB_PATH=/app/data/data.sqlite \
+  -e OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:5080/api/default \
+  -e OTEL_EXPORTER_OTLP_USER="admin@example.com" \
+  -e OTEL_EXPORTER_OTLP_PASS="Password1!" \
+  -e OTEL_SERVICE_NAME=webapp-devops \
+  -v webapp_data:/app/data --restart always webapp-devops
+```
+
+Verificación:
+
+```bash
+curl http://localhost/health
+curl http://localhost/api/users
+docker logs --tail 100 webapp-container
+```
+
+En modo producción no hace falta hacer esto a mano: el workflow lo ejecuta por SSH en cada push válido.
+
+## Comandos locales
 
 ```bash
 pnpm install
-pnpm start                 # http://localhost:3000 (login: admin / admin123)
-pnpm test                  # backend
-pnpm test:e2e              # frontend (instala chromium antes si hace falta)
+pnpm start                  # http://localhost:3000 (admin / admin123)
+pnpm test                   # Jest
+pnpm test:e2e               # Playwright (instala Chromium si hace falta)
 ```
+
+## OpenObserve
+
+UI: `http://<EC2_HOST>:5080`.
+
+| Stream | Contenido |
+|---|---|
+| `pipeline_logs` | `TESTS_PASSED`, `TESTS_FAILED`, `DEPLOYMENT_SUCCESSFUL`. |
+| `app_logs` | logs JSON de la API con `trace_id` / `span_id`. |
+| `app_traces` | trazas HTTP, Express y SQLite. |
+| `http_requests_total`, `http_errors_total`, `http_request_duration_ms` | métricas de la app. |
+| `infra_metrics` | CPU, RAM, red, temperatura, disco y host de la EC2. |
+
+En *Dashboards > Import* sube `openobserve/dashboard.json`. Tiene tres pestañas: CI/CD, Aplicación e Infraestructura.
+
+Alertas sugeridas: `TESTS_FAILED` en 5 min, `status_code >= 500` en `app_logs`, `cpu_percent > 85` o `ram_percent > 90` en `infra_metrics`, y ausencia de `DEPLOYMENT_SUCCESSFUL` tras un `TESTS_PASSED`.
+
+> Las EC2 no suelen exponer sensor térmico. Si no hay `thermal_zone0` ni `hwmon`, `temperature_c` se reporta en `0` (sin dato).

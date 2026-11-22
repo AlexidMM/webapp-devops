@@ -54,6 +54,11 @@ jobs:
           OO_URL: ${{ secrets.OPENOBSERVE_URL || format('http://{0}:5080', secrets.EC2_HOST) }}
         run: |
           set -e
+          OO_PASS_EFFECTIVE="$OO_PASS"
+          if [ ${#OO_PASS_EFFECTIVE} -lt 8 ] || ! printf '%s' "$OO_PASS_EFFECTIVE" | grep -q '[a-z]' || ! printf '%s' "$OO_PASS_EFFECTIVE" | grep -q '[A-Z]' || ! printf '%s' "$OO_PASS_EFFECTIVE" | grep -q '[0-9]' || ! printf '%s' "$OO_PASS_EFFECTIVE" | grep -q '[^A-Za-z0-9]'; then
+            OO_PASS_EFFECTIVE="${OO_PASS}Aa1!Aa1!"
+            echo "OPENOBSERVE_PASS no cumple la política de OpenObserve; se aplicó un sufijo automático (valor no mostrado)"
+          fi
           if [ "$JEST_OUTCOME" = "success" ] && [ "$PW_OUTCOME" = "success" ]; then
             EVENT=TESTS_PASSED; STATUS=SUCCESS
           else
@@ -71,7 +76,7 @@ jobs:
           if curl -sf --connect-timeout 5 --max-time 15 -X POST \
             "$OO_URL/api/default/pipeline_logs/_json" \
             -H "Content-Type: application/json" \
-            -u "$OO_USER:$OO_PASS" \
+            -u "$OO_USER:$OO_PASS_EFFECTIVE" \
             --data-binary @/tmp/o2-test-event.json; then
             echo "Evento $EVENT enviado a OpenObserve ($OO_URL)"
           else
@@ -135,19 +140,23 @@ jobs:
             echo "=== Espacio después de limpiar ==="
             df -h / | tail -n 1
 
-            # --- OpenObserve: se asegura de que esté corriendo en la EC2 ---
-            if sudo docker ps -a --format '{{.Names}}' | grep -q '^openobserve$'; then
-              sudo docker start openobserve > /dev/null || true
-            else
-              sudo docker run -d --name openobserve -p 5080:5080 \
-                -e ZO_ROOT_USER_EMAIL="$OO_USER" \
-                -e ZO_ROOT_USER_PASSWORD="$OO_PASS" \
-                -v openobserve_data:/data --restart always \
-                openobserve/openobserve:latest
-              sleep 20
+            OO_PASS_EFFECTIVE="$OO_PASS"
+            if [ ${#OO_PASS_EFFECTIVE} -lt 8 ] || ! printf '%s' "$OO_PASS_EFFECTIVE" | grep -q '[a-z]' || ! printf '%s' "$OO_PASS_EFFECTIVE" | grep -q '[A-Z]' || ! printf '%s' "$OO_PASS_EFFECTIVE" | grep -q '[0-9]' || ! printf '%s' "$OO_PASS_EFFECTIVE" | grep -q '[^A-Za-z0-9]'; then
+              OO_PASS_EFFECTIVE="${OO_PASS}Aa1!Aa1!"
+              echo "OPENOBSERVE_PASS no cumple la política de OpenObserve; se aplicó un sufijo automático (valor no mostrado)"
             fi
 
-            echo "=== Verificando OpenObserve ==="
+            oo_recreate() {
+              echo "Recreando openobserve_data con las credenciales efectivas"
+              echo "Advertencia: se pierden los datos previos de OpenObserve en este volumen"
+              sudo docker rm -f openobserve >/dev/null 2>&1 || true
+              sudo docker volume rm openobserve_data >/dev/null 2>&1 || true
+              sudo docker run -d --name openobserve -p 5080:5080 \
+                -e ZO_ROOT_USER_EMAIL="$OO_USER" \
+                -e ZO_ROOT_USER_PASSWORD="$OO_PASS_EFFECTIVE" \
+                -v openobserve_data:/data --restart always \
+                openobserve/openobserve:latest >/dev/null
+            }
             oo_wait() {
               for i in $(seq 1 30); do
                 OO_CODE=$(curl -sL -o /dev/null -w '%{http_code}' http://localhost:5080/ || true)
@@ -161,25 +170,31 @@ jobs:
               curl -s -o /tmp/o2-probe.out -w '%{http_code}' -X POST \
                 "$OO_URL/api/default/pipeline_logs/_json" \
                 -H "Content-Type: application/json" \
-                -u "$OO_USER:$OO_PASS" \
+                -u "$OO_USER:$OO_PASS_EFFECTIVE" \
                 -d "$OO_PROBE_PAYLOAD" || true
             }
+
+            if sudo docker ps -a --format '{{.Names}}' | grep -q '^openobserve$'; then
+              sudo docker start openobserve > /dev/null || true
+            else
+              oo_recreate
+              sleep 20
+            fi
+
+            echo "=== Verificando OpenObserve ==="
             if ! oo_wait; then
-              echo "OpenObserve no respondió en http://localhost:5080 (code=$OO_CODE)"
+              echo "OpenObserve no respondió (code=$OO_CODE); recreando contenedor"
               sudo docker logs --tail 50 openobserve || true
-              exit 1
+              oo_recreate
+              if ! oo_wait; then
+                echo "OpenObserve sigue sin responder tras recrearlo (code=$OO_CODE)"
+                sudo docker logs --tail 50 openobserve || true
+                exit 1
+              fi
             fi
             OO_PROBE_CODE=$(oo_probe)
             if [ "$OO_PROBE_CODE" = "401" ] || [ "$OO_PROBE_CODE" = "403" ]; then
-              echo "Credenciales root desincronizadas: recreando openobserve_data con OPENOBSERVE_USER/OPENOBSERVE_PASS"
-              echo "Advertencia: se pierden los datos previos de OpenObserve en este volumen"
-              sudo docker rm -f openobserve >/dev/null 2>&1 || true
-              sudo docker volume rm openobserve_data >/dev/null 2>&1 || true
-              sudo docker run -d --name openobserve -p 5080:5080 \
-                -e ZO_ROOT_USER_EMAIL="$OO_USER" \
-                -e ZO_ROOT_USER_PASSWORD="$OO_PASS" \
-                -v openobserve_data:/data --restart always \
-                openobserve/openobserve:latest
+              oo_recreate
               if ! oo_wait; then
                 echo "OpenObserve no respondió tras recrearlo (code=$OO_CODE)"
                 sudo docker logs --tail 50 openobserve || true
@@ -206,7 +221,7 @@ jobs:
               -e DB_PATH=/app/data/data.sqlite \
               -e OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:5080/api/default \
               -e OTEL_EXPORTER_OTLP_USER="$OO_USER" \
-              -e OTEL_EXPORTER_OTLP_PASS="$OO_PASS" \
+              -e OTEL_EXPORTER_OTLP_PASS="$OO_PASS_EFFECTIVE" \
               -e OTEL_SERVICE_NAME=webapp-devops \
               -v webapp_data:/app/data \
               --restart always \
@@ -216,7 +231,7 @@ jobs:
             sudo mkdir -p /opt/monitor
             sudo install -m 700 /home/ubuntu/monitor/metrics.sh /opt/monitor/metrics.sh
             printf "OO_USER='%s'\nOO_PASS='%s'\nOO_URL='%s'\n" \
-              "$OO_USER" "$OO_PASS" "$OO_URL" | sudo tee /opt/monitor/oo.env > /dev/null
+              "$OO_USER" "$OO_PASS_EFFECTIVE" "$OO_URL" | sudo tee /opt/monitor/oo.env > /dev/null
             sudo chmod 600 /opt/monitor/oo.env
             sudo crontab -l 2>/dev/null | grep -v '/opt/monitor/metrics.sh' > /tmp/oo-cron || true
             echo '* * * * * /opt/monitor/metrics.sh' >> /tmp/oo-cron
@@ -254,7 +269,7 @@ jobs:
             OO_DEPLOY_CODE=$(curl -s -o /tmp/o2-deploy.out -w '%{http_code}' -X POST \
               "$OO_URL/api/default/pipeline_logs/_json" \
               -H "Content-Type: application/json" \
-              -u "$OO_USER:$OO_PASS" \
+              -u "$OO_USER:$OO_PASS_EFFECTIVE" \
               -d "$OO_DEPLOY_PAYLOAD" || true)
             if [ "$OO_DEPLOY_CODE" != "200" ] && [ "$OO_DEPLOY_CODE" != "201" ] && [ "$OO_DEPLOY_CODE" != "204" ]; then
               echo "Reintentando evento de despliegue (code=$OO_DEPLOY_CODE)"
@@ -262,7 +277,7 @@ jobs:
               OO_DEPLOY_CODE=$(curl -s -o /tmp/o2-deploy.out -w '%{http_code}' -X POST \
                 "$OO_URL/api/default/pipeline_logs/_json" \
                 -H "Content-Type: application/json" \
-                -u "$OO_USER:$OO_PASS" \
+                -u "$OO_USER:$OO_PASS_EFFECTIVE" \
                 -d "$OO_DEPLOY_PAYLOAD" || true)
             fi
             case "$OO_DEPLOY_CODE" in
