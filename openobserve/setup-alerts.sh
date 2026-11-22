@@ -24,6 +24,11 @@ curl -sf -X POST "$API/default/alerts/destinations" \
 
 create_alert() {
   local name="$1" stream="$2" sql="$3" threshold="$4" period="$5"
+  if N="$name" curl -sf -u "$OO_USER:$OO_PASS" "$API/v2/default/alerts" |
+    N="$name" python3 -c 'import sys,json,os; sys.exit(0 if any(a["name"]==os.environ["N"] for a in json.load(sys.stdin)["list"]) else 1)'; then
+    echo "Alerta ya existente: $name"
+    return 0
+  fi
   if curl -sf -X POST "$API/v2/default/alerts" \
     -H "Content-Type: application/json" \
     -H "Authorization: Basic $AUTH" \
