@@ -236,3 +236,4 @@ describe('BACKUP', () => {
     expect([200, 404]).toContain(res.status);
   });
 });
+test('demo fallo intencional', () => { expect(1).toBe(2); });
