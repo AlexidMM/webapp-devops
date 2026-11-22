@@ -116,7 +116,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: monitor/metrics.sh
+          source: monitor/metrics.sh,monitor/app-logs.sh
           target: /home/ubuntu
 
       - name: Desplegar aplicación y configurar observabilidad en EC2
