@@ -26,6 +26,8 @@ Push a main/master
 
 Cada prueba tiene un nombre descriptivo de la conducta verificada. Playwright levanta el servidor con `DB_PATH=:memory:` y cada caso limpia la BD con `DELETE /truncate`, por lo que no afectan los datos reales. El proyecto es JavaScript: Jest cubre el backend y Playwright el frontend (no se usa pytest porque no hay código Python).
 
+No se genera reporte HTML/PDF de Playwright: el reporter es solo `list` y `trace`/`screenshot`/`video` están desactivados. La trazabilidad de ejecuciones vive en el stream `pipeline_logs` de OpenObserve.
+
 ## Secretos configurados en GitHub (Settings > Secrets and variables > Actions)
 
 | Secreto | Uso |
@@ -34,7 +36,7 @@ Cada prueba tiene un nombre descriptivo de la conducta verificada. Playwright le
 | `EC2_SSH_KEY` | Llave privada SSH (usuario `ubuntu`). |
 | `DOCKER_USERNAME` / `DOCKER_PASSWORD` | Docker Hub. |
 | `OPENOBSERVE_USER` / `OPENOBSERVE_PASS` | Email y contraseña del usuario root de OpenObserve. |
-| `OPENOBSERVE_URL` | Opcional: URL pública de OpenObserve (ej. `http://IP:5080`). Por defecto se usa `http://EC2_HOST:5080`. |
+| `OPENOBSERVE_URL` | Opcional: URL pública de OpenObserve para el runner (ej. `http://IP:5080`). Por defecto `http://EC2_HOST:5080`. Dentro de la EC2 el pipeline usa `http://localhost:5080`. |
 
 Si OpenObserve solo escucha en `localhost`, el pipeline necesita `OPENOBSERVE_URL` accesible desde el runner o abrir el puerto TCP 5080 en el Security Group de EC2. Si el `curl` termina con `exit code 28` (timeout), ese es el motivo: el evento no se registra, pero el paso usa `continue-on-error` y no cancela el job.
 

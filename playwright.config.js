@@ -6,11 +6,13 @@ export default defineConfig({
   expect: { timeout: 7_000 },
   retries: 0,
   workers: 1,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [['list']],
   use: {
     baseURL: 'http://localhost:3000',
     headless: true,
-    trace: 'retain-on-failure',
+    trace: 'off',
+    screenshot: 'off',
+    video: 'off',
   },
   webServer: {
     command: 'node server.js',
