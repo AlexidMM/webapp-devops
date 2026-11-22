@@ -152,20 +152,19 @@
         {
           "id": "Panel_00_07",
           "type": "line",
-          "title": "Red EC2 (MB)",
-          "description": "Bytes recibidos y transmitidos por minuto",
+          "title": "Ancho de banda EC2 (bytes/s)",
+          "description": "Bytes transferidos por segundo (RX + TX) en todas las interfaces excepto loopback",
           "config": {"show_legends": true, "legends_position": "bottom", "unit": "decbytes", "decimals": 1, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
           "queryType": "sql",
           "queries": [{
-            "query": "SELECT histogram(_timestamp) as x_axis_1, avg(net_rx_mb) as y_axis_1, avg(net_tx_mb) as y_axis_2 FROM infra_metrics GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
+            "query": "SELECT histogram(_timestamp) as x_axis_1, avg(network_bps) as y_axis_1 FROM infra_metrics GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
               "stream": "infra_metrics", "stream_type": "logs",
               "x": [{"label": "Hora", "alias": "x_axis_1", "column": "_timestamp", "color": null, "aggregationFunction": "histogram", "sortBy": "ASC"}],
               "y": [
-                {"label": "RX", "alias": "y_axis_1", "column": "net_rx_mb", "color": "#22c55e", "aggregationFunction": "avg"},
-                {"label": "TX", "alias": "y_axis_2", "column": "net_tx_mb", "color": "#3b82f6", "aggregationFunction": "avg"}
+                {"label": "RX + TX", "alias": "y_axis_1", "column": "network_bps", "color": "#22c55e", "aggregationFunction": "avg"}
               ],
               "z": [], "breakdown": [],
               "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
