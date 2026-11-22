@@ -150,6 +150,7 @@ const crud = (route, table, col) => {
 
 crud('users', 'users', 'name');
 crud('items', 'items', 'item');
+crud('products', 'items', 'item');
 
 // ==========================================
 // LOGS

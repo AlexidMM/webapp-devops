@@ -6,7 +6,7 @@ API REST + dashboard web desplegados en AWS EC2 con GitHub Actions, Docker Hub y
 
 ```text
 webapp-devops/
-├── app.js                     API Express: /health, /users, /items, /logs, /backup, /truncate, /stats/requests
+├── app.js                     API Express: /health, /users, /items (alias /products), /logs, /backup, /truncate, /stats/requests
 ├── db.js                      SQLite instrumentado con OpenTelemetry
 ├── logger.js                  logs JSON con trace_id / span_id
 ├── instrumentation.js         exportadores OTLP (logs, métricas y trazas)
@@ -23,7 +23,7 @@ webapp-devops/
 
 ## Código
 
-- **Backend:** Express 5 + SQLite. `app.js` registra middleware de métricas (`http_requests_total`, `http_errors_total`, `http_request_duration_ms`) y un log estructurado por petición. `db.js` crea spans para cada consulta.
+- **Backend:** Express 5 + SQLite. `app.js` registra middleware de métricas (`http_requests_total`, `http_errors_total`, `http_request_duration_ms`) y un log estructurado por petición. `db.js` crea spans `CLIENT` por consulta con `db.system.name`, `db.operation.name` y `db.statement`, compatibles con *Database monitoring* de OpenObserve.
 - **Frontend:** `public/index.html` usa la API y muestra datos con Chart.js. La tabla de peticiones usa hora de `America/Mexico_City`.
 - **Observabilidad:** `instrumentation.js` envía por OTLP/HTTP a `http://<host>:5080/api/default`. Si faltan las variables `OTEL_*`, la instrumentación se desactiva y la app sigue funcionando. `monitor/metrics.sh` envía CPU, RAM, red, temperatura, disco y host cada minuto.
 - **Pruebas:** Jest cubre el backend; Playwright cubre el frontend levantando el servidor con `DB_PATH=:memory:`. No se generan reportes HTML/PDF: el registro de ejecuciones vive en el stream `pipeline_logs`.
