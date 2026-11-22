@@ -146,7 +146,7 @@ ssh -i <llave.pem> ubuntu@<EC2_HOST>
 bash /home/ubuntu/setup-alerts.sh
 ```
 
-El script crea un destino webhook `oo_pipeline` que publica los disparos como eventos `ALERT_FIRED` en `pipeline_logs`, más cuatro reglas: `TESTS_FAILED`, `statusCode >= 500`, `cpu_percent > 85` y `ram_percent > 90`. No requiere SMTP ni correo. El workflow ya levanta OpenObserve con `ZO_SSRF_ALLOW_LOOPBACK=true` para permitir ese webhook interno.
+El script crea un destino webhook `oo_pipeline` que publica los disparos como eventos `ALERT_FIRED` en `pipeline_logs`, más cuatro reglas: `TESTS_FAILED`, `statuscode >= 500`, `cpu_percent > 85` y `ram_percent > 90`. No requiere SMTP ni correo. El workflow ya levanta OpenObserve con `ZO_SSRF_ALLOW_LOOPBACK=true` para permitir ese webhook interno.
 
 > Las EC2 no suelen exponer sensor térmico. Si no hay `thermal_zone0` ni `hwmon`, `temperature_c` se reporta en `0` (sin dato).
 

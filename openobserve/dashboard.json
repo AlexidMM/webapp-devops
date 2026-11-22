@@ -324,7 +324,7 @@
           "config": {"show_legends": true, "legends_position": null, "wrap_table_cells": true, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
           "queryType": "sql",
           "queries": [{
-            "query": "SELECT timestamp_mx as \"x_axis_1\", severity as \"x_axis_2\", body as \"x_axis_3\", method as \"x_axis_4\", url as \"x_axis_5\", statusCode as \"x_axis_6\", responseTimeMs as \"x_axis_7\" FROM \"app_logs\" ORDER BY _timestamp DESC LIMIT 50",
+            "query": "SELECT timestamp_mx as \"x_axis_1\", severity as \"x_axis_2\", body as \"x_axis_3\", method as \"x_axis_4\", url as \"x_axis_5\", statuscode as \"x_axis_6\", responsetimems as \"x_axis_7\" FROM \"app_logs\" ORDER BY _timestamp DESC LIMIT 50",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
@@ -335,8 +335,8 @@
                 {"label": "Mensaje", "alias": "x_axis_3", "column": "body", "color": null},
                 {"label": "Método", "alias": "x_axis_4", "column": "method", "color": null},
                 {"label": "Endpoint", "alias": "x_axis_5", "column": "url", "color": null},
-                {"label": "Status", "alias": "x_axis_6", "column": "statusCode", "color": null},
-                {"label": "Latencia", "alias": "x_axis_7", "column": "responseTimeMs", "color": null}
+                {"label": "Status", "alias": "x_axis_6", "column": "statuscode", "color": null},
+                {"label": "Latencia", "alias": "x_axis_7", "column": "responsetimems", "color": null}
               ],
               "y": [], "z": [], "breakdown": [],
               "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
@@ -354,13 +354,13 @@
           "config": {"show_legends": true, "legends_position": null, "unit": "ms", "decimals": 2, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
           "queryType": "sql",
           "queries": [{
-            "query": "SELECT histogram(_timestamp) as \"x_axis_1\", avg(responseTimeMs) as \"y_axis_1\" FROM \"app_logs\" GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
+            "query": "SELECT histogram(_timestamp) as \"x_axis_1\", avg(responsetimems) as \"y_axis_1\" FROM \"app_logs\" GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
               "stream": "app_logs", "stream_type": "logs",
               "x": [{"label": "Hora", "alias": "x_axis_1", "column": "_timestamp", "color": null, "aggregationFunction": "histogram", "sortBy": "ASC"}],
-              "y": [{"label": "ms", "alias": "y_axis_1", "column": "responseTimeMs", "color": "#6366f1", "aggregationFunction": "avg"}],
+              "y": [{"label": "ms", "alias": "y_axis_1", "column": "responsetimems", "color": "#6366f1", "aggregationFunction": "avg"}],
               "z": [], "breakdown": [],
               "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
             },
@@ -373,16 +373,16 @@
           "id": "Panel_02_03",
           "type": "bar",
           "title": "Distribución de códigos HTTP",
-          "description": "Volumen de respuestas agrupadas por statusCode",
+          "description": "Volumen de respuestas agrupadas por statuscode",
           "config": {"show_legends": true, "legends_position": null, "unit": "short", "decimals": 0, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
           "queryType": "sql",
           "queries": [{
-            "query": "SELECT statusCode as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"app_logs\" GROUP BY x_axis_1 ORDER BY y_axis_1 DESC",
+            "query": "SELECT statuscode as \"x_axis_1\", count(_timestamp) as \"y_axis_1\" FROM \"app_logs\" GROUP BY x_axis_1 ORDER BY y_axis_1 DESC",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
               "stream": "app_logs", "stream_type": "logs",
-              "x": [{"label": "Status", "alias": "x_axis_1", "column": "statusCode", "color": null}],
+              "x": [{"label": "Status", "alias": "x_axis_1", "column": "statuscode", "color": null}],
               "y": [{"label": "Peticiones", "alias": "y_axis_1", "column": "_timestamp", "color": "#10b981", "aggregationFunction": "count"}],
               "z": [], "breakdown": [],
               "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
@@ -422,11 +422,11 @@
           "id": "Panel_02_05",
           "type": "line",
           "title": "Errores HTTP por minuto",
-          "description": "Respuestas con statusCode >= 400 en app_logs",
+          "description": "Respuestas con statuscode >= 400 en app_logs",
           "config": {"show_legends": true, "legends_position": "bottom", "unit": "short", "decimals": 0, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
           "queryType": "sql",
           "queries": [{
-            "query": "SELECT histogram(_timestamp) as x_axis_1, count(_timestamp) as y_axis_1 FROM app_logs WHERE statusCode >= 400 GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
+            "query": "SELECT histogram(_timestamp) as x_axis_1, count(_timestamp) as y_axis_1 FROM app_logs WHERE statuscode >= 400 GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {

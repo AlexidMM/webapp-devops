@@ -35,7 +35,7 @@ create_alert() {
 }
 
 create_alert alert_tests_failed pipeline_logs "SELECT count(*) as c FROM pipeline_logs WHERE status = 'FAILED'" 1 5
-create_alert alert_http_5xx app_logs "SELECT count(*) as c FROM app_logs WHERE statusCode >= 500" 1 5
+create_alert alert_http_5xx app_logs "SELECT count(*) as c FROM app_logs WHERE statuscode >= 500" 1 5
 create_alert alert_cpu_alta infra_metrics "SELECT avg(cpu_percent) as c FROM infra_metrics" 85 5
 create_alert alert_ram_alta infra_metrics "SELECT avg(ram_percent) as c FROM infra_metrics" 90 5
 
