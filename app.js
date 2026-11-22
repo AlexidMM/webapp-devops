@@ -33,6 +33,9 @@ const durationHistogram = meter.createHistogram('http_request_duration_ms', {
   unit: 'ms',
 });
 
+const MAX_RECENT_REQUESTS = 50;
+const recentRequests = [];
+
 // Middleware de trazabilidad: métrica + log estructurado por cada petición
 app.use((req, res, next) => {
   const start = process.hrtime.bigint();
@@ -48,6 +51,16 @@ app.use((req, res, next) => {
     requestCounter.add(1, attrs);
     durationHistogram.record(responseTimeMs, attrs);
     if (statusCode >= 400) errorCounter.add(1, attrs);
+        if (!req.originalUrl.startsWith('/stats') && req.originalUrl !== '/favicon.ico') {
+        recentRequests.push({
+          timestamp_mx: new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour12: false }),
+          method: req.method,
+          url: req.originalUrl,
+          statusCode,
+          responseTimeMs: Number(responseTimeMs.toFixed(2)),
+        });
+        if (recentRequests.length > MAX_RECENT_REQUESTS) recentRequests.shift();
+        }
 
     const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
     log(level, `${req.method} ${req.originalUrl} ${statusCode}`, {
@@ -175,6 +188,13 @@ app.delete('/truncate', (req, res) => {
   db.exec('DELETE FROM users; DELETE FROM items; DELETE FROM logs;', (err) =>
     err ? error(res, err.message, 500) : response(res, { message: 'Base de datos vaciada' }));
 });
+
+// ==========================================
+// ESTADÍSTICAS PARA EL DASHBOARD + FAVICON
+// ==========================================
+app.get('/stats/requests', (req, res) => response(res, recentRequests.slice(-20)));
+
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // ==========================================
 // 404 y manejo de errores

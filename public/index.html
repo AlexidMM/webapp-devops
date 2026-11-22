@@ -4,8 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebApp DevOps - Dashboard</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <!-- Respaldo: si el CDN de Tailwind tarda, "hidden" sigue funcionando -->
+  <style>.hidden { display: none !important; }</style>
 </head>
 <body class="bg-gray-100 font-sans">
 
@@ -15,11 +17,11 @@
       <h2 class="text-2xl font-bold mb-6 text-center text-blue-600">Inicio de Sesión</h2>
       <form id="login-form" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700">Usuario</label>
+          <label for="login-username" class="block text-sm font-medium text-gray-700">Usuario</label>
           <input type="text" id="login-username" class="w-full mt-1 p-2 border rounded-md" required>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700">Contraseña</label>
+          <label for="login-password" class="block text-sm font-medium text-gray-700">Contraseña</label>
           <input type="password" id="login-password" class="w-full mt-1 p-2 border rounded-md" required>
         </div>
         <button type="submit" id="btn-login" class="w-full bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700">Ingresar</button>
@@ -42,131 +44,190 @@
       <!-- CRUD USUARIOS -->
       <div class="bg-white p-6 rounded-lg shadow">
         <h2 class="text-xl font-bold mb-4 text-gray-700">Gestión de Usuarios</h2>
-        <form id="form-user" class="flex gap-2 mb-4">
+        <form id="form-user" class="flex gap-2 mb-2">
           <input type="text" id="input-user-name" placeholder="Nombre de usuario" class="flex-1 p-2 border rounded-md" required>
           <button type="submit" id="btn-add-user" class="bg-green-600 text-white px-4 py-2 rounded-md">Agregar</button>
         </form>
+        <p id="user-error" class="hidden text-red-500 text-sm mb-2"></p>
+        <p id="users-empty" class="text-sm text-gray-400 py-2">Sin usuarios registrados</p>
         <ul id="users-list" class="divide-y divide-gray-200"></ul>
       </div>
 
       <!-- CRUD PRODUCTOS / ITEMS -->
       <div class="bg-white p-6 rounded-lg shadow">
         <h2 class="text-xl font-bold mb-4 text-gray-700">Gestión de Productos (Items)</h2>
-        <form id="form-item" class="flex gap-2 mb-4">
+        <form id="form-item" class="flex gap-2 mb-2">
           <input type="text" id="input-item-name" placeholder="Nombre del producto" class="flex-1 p-2 border rounded-md" required>
           <button type="submit" id="btn-add-item" class="bg-green-600 text-white px-4 py-2 rounded-md">Agregar</button>
         </form>
+        <p id="item-error" class="hidden text-red-500 text-sm mb-2"></p>
+        <p id="items-empty" class="text-sm text-gray-400 py-2">Sin productos registrados</p>
         <ul id="items-list" class="divide-y divide-gray-200"></ul>
       </div>
     </div>
 
-    <!-- GRÁFICA DE DATOS -->
-    <div class="bg-white p-6 rounded-lg shadow mt-6">
-      <h2 class="text-xl font-bold mb-4 text-gray-700">Métricas de Registros en Sistema</h2>
-      <div class="w-full max-w-lg mx-auto">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      <!-- GRÁFICA 1: REGISTROS -->
+      <div class="bg-white p-6 rounded-lg shadow">
+        <h2 class="text-xl font-bold mb-4 text-gray-700">Métricas de Registros en Sistema</h2>
         <canvas id="metricsChart"></canvas>
       </div>
+
+      <!-- GRÁFICA 2: LATENCIA -->
+      <div class="bg-white p-6 rounded-lg shadow">
+        <h2 class="text-xl font-bold mb-4 text-gray-700">Tiempo de Respuesta por Petición (ms)</h2>
+        <canvas id="latencyChart"></canvas>
+      </div>
+    </div>
+
+    <!-- TABLA DE PETICIONES -->
+    <div class="bg-white p-6 rounded-lg shadow mt-6 overflow-x-auto">
+      <h2 class="text-xl font-bold mb-4 text-gray-700">Últimas Peticiones (hora de México)</h2>
+      <table id="requests-table" class="w-full text-sm text-left">
+        <thead>
+          <tr class="border-b text-gray-600">
+            <th class="py-1 px-2">Hora (México)</th>
+            <th class="py-1 px-2">Método</th>
+            <th class="py-1 px-2">Endpoint</th>
+            <th class="py-1 px-2">Status</th>
+            <th class="py-1 px-2">Tiempo</th>
+          </tr>
+        </thead>
+        <tbody id="requests-table-body"></tbody>
+      </table>
     </div>
   </div>
 
   <script>
-    let chartInstance = null;
+    const $ = (id) => document.getElementById(id);
+    const REFRESH_MS = 10000;
 
-    // Manejo de Login
-    document.getElementById('login-form').addEventListener('submit', (e) => {
+    let countChart = null;
+    let latencyChart = null;
+    let refreshTimer = null;
+    let loggedIn = false;
+    let loadSeq = 0; // descarta respuestas viejas si llegan fuera de orden
+
+    // ---------- Login / Logout ----------
+    $('login-form').addEventListener('submit', (e) => {
       e.preventDefault();
-      const user = document.getElementById('login-username').value;
-      const pass = document.getElementById('login-password').value;
+      const user = $('login-username').value;
+      const pass = $('login-password').value;
 
       if (user === 'admin' && pass === 'admin123') {
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('dashboard-screen').classList.remove('hidden');
-        document.getElementById('login-error').classList.add('hidden');
+        loggedIn = true;
+        $('login-screen').classList.add('hidden');
+        $('dashboard-screen').classList.remove('hidden');
+        $('login-error').classList.add('hidden');
         loadData();
         checkHealth();
+        refreshTimer = setInterval(() => { checkHealth(); }, REFRESH_MS);
       } else {
-        document.getElementById('login-error').classList.remove('hidden');
+        $('login-error').classList.remove('hidden');
       }
     });
 
-    // Cierre de sesión limpiando credenciales
-    document.getElementById('btn-logout').addEventListener('click', () => {
-      document.getElementById('dashboard-screen').classList.add('hidden');
-      document.getElementById('login-screen').classList.remove('hidden');
-      document.getElementById('login-username').value = '';
-      document.getElementById('login-password').value = '';
+    $('btn-logout').addEventListener('click', () => {
+      loggedIn = false;
+      loadSeq++;
+      clearInterval(refreshTimer);
+      if (countChart) { countChart.destroy(); countChart = null; }
+      if (latencyChart) { latencyChart.destroy(); latencyChart = null; }
+      $('dashboard-screen').classList.add('hidden');
+      $('login-screen').classList.remove('hidden');
+      $('login-username').value = '';
+      $('login-password').value = '';
     });
 
-    // Health Check Status
+    // ---------- Health ----------
     async function checkHealth() {
+      const badge = $('health-status');
+      const t0 = performance.now();
       try {
         const res = await fetch('/health');
         const data = await res.json();
-        const badge = document.getElementById('health-status');
+        const ms = Math.round(performance.now() - t0);
         if (res.ok && data.status === 'OK') {
-          badge.textContent = `Sistema Activo (${data.timestamp})`;
+          badge.textContent = `Sistema Activo (${data.timestamp}) · ${ms} ms`;
           badge.className = 'px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800';
+        } else {
+          badge.textContent = 'Sistema con fallas';
+          badge.className = 'px-3 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800';
         }
       } catch (err) {
-        const badge = document.getElementById('health-status');
         badge.textContent = 'Error de Conexión';
         badge.className = 'px-3 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800';
       }
+      loadRequestStats();
     }
 
-    // CRUD Operaciones
+    // ---------- Listas (usa textContent: no interpreta HTML, evita XSS) ----------
+    function renderList(listEl, emptyEl, rows, field, onDelete) {
+      listEl.replaceChildren();
+      emptyEl.classList.toggle('hidden', rows.length > 0);
+
+      rows.forEach((row) => {
+        const li = document.createElement('li');
+        li.className = 'py-2 flex justify-between items-center';
+
+        const span = document.createElement('span');
+        span.textContent = row[field];
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'text-red-600 hover:text-red-800 text-sm';
+        btn.textContent = 'Eliminar';
+        btn.addEventListener('click', () => onDelete(row.id));
+
+        li.append(span, btn);
+        listEl.appendChild(li);
+      });
+    }
+
     async function loadData() {
-      const resUsers = await fetch('/users');
-      const dataUsers = await resUsers.json();
-      const users = dataUsers.data || [];
+      const seq = ++loadSeq;
+      const [resUsers, resItems] = await Promise.all([fetch('/users'), fetch('/items')]);
+      const users = (await resUsers.json()).data || [];
+      const items = (await resItems.json()).data || [];
+      if (seq !== loadSeq || !loggedIn) return;
 
-      const resItems = await fetch('/items');
-      const dataItems = await resItems.json();
-      const items = dataItems.data || [];
-
-      // Render Users
-      const usersList = document.getElementById('users-list');
-      usersList.innerHTML = users.map(u => `
-        <li class="py-2 flex justify-between items-center">
-          <span class="user-item-name">${u.name}</span>
-          <button onclick="deleteUser(${u.id})" class="text-red-600 hover:text-red-800 text-sm">Eliminar</button>
-        </li>
-      `).join('');
-
-      // Render Items
-      const itemsList = document.getElementById('items-list');
-      itemsList.innerHTML = items.map(i => `
-        <li class="py-2 flex justify-between items-center">
-          <span class="product-item-name">${i.item}</span>
-          <button onclick="deleteItem(${i.id})" class="text-red-600 hover:text-red-800 text-sm">Eliminar</button>
-        </li>
-      `).join('');
-
-      updateChart(users.length, items.length);
+      renderList($('users-list'), $('users-empty'), users, 'name', deleteUser);
+      renderList($('items-list'), $('items-empty'), items, 'item', deleteItem);
+      updateCountChart(users.length, items.length);
+      loadRequestStats();
     }
 
-    document.getElementById('form-user').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const input = document.getElementById('input-user-name');
-      await fetch('/users', {
+    async function addRecord(url, field, input, errorEl, label) {
+      const value = input.value.trim();
+      if (!value) {
+        errorEl.textContent = `El ${label} no puede estar vacío`;
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      errorEl.classList.add('hidden');
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: input.value })
+        body: JSON.stringify({ [field]: value })
       });
+      if (!res.ok) {
+        errorEl.textContent = `No se pudo guardar el ${label}`;
+        errorEl.classList.remove('hidden');
+        return;
+      }
       input.value = '';
       loadData();
+    }
+
+    $('form-user').addEventListener('submit', (e) => {
+      e.preventDefault();
+      addRecord('/users', 'name', $('input-user-name'), $('user-error'), 'nombre de usuario');
     });
 
-    document.getElementById('form-item').addEventListener('submit', async (e) => {
+    $('form-item').addEventListener('submit', (e) => {
       e.preventDefault();
-      const input = document.getElementById('input-item-name');
-      await fetch('/items', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item: input.value })
-      });
-      input.value = '';
-      loadData();
+      addRecord('/items', 'item', $('input-item-name'), $('item-error'), 'nombre del producto');
     });
 
     async function deleteUser(id) {
@@ -179,25 +240,99 @@
       loadData();
     }
 
-    function updateChart(userCount, itemCount) {
-      const ctx = document.getElementById('metricsChart').getContext('2d');
-      if (chartInstance) chartInstance.destroy();
+    // ---------- Gráfica 1: registros ----------
+    function updateCountChart(userCount, itemCount) {
+      if (!countChart) {
+        countChart = new Chart($('metricsChart').getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels: ['Usuarios', 'Productos'],
+            datasets: [{
+              label: 'Total de Registros',
+              data: [userCount, itemCount],
+              backgroundColor: ['#3B82F6', '#10B981']
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+          }
+        });
+        return;
+      }
+      countChart.data.datasets[0].data = [userCount, itemCount];
+      countChart.update();
+    }
 
-      chartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: ['Usuarios', 'Productos'],
-          datasets: [{
-            label: 'Total de Registros',
-            data: [userCount, itemCount],
-            backgroundColor: ['#3B82F6', '#10B981']
-          }]
-        },
-        options: {
-          responsive: true,
-          scales: { y: { beginAtZero: true, precision: 0 } }
-        }
+    // ---------- Peticiones: tabla + gráfica de latencia ----------
+    async function loadRequestStats() {
+      try {
+        const res = await fetch('/stats/requests');
+        const rows = (await res.json()).data || [];
+        if (!loggedIn) return;
+        renderRequestsTable(rows);
+        updateLatencyChart(rows);
+      } catch (err) {
+        /* se reintenta en el siguiente ciclo */
+      }
+    }
+
+    function cell(text, extraClass = '') {
+      const td = document.createElement('td');
+      td.className = `py-1 px-2 ${extraClass}`;
+      td.textContent = text;
+      return td;
+    }
+
+    function renderRequestsTable(rows) {
+      const body = $('requests-table-body');
+      body.replaceChildren();
+      [...rows].reverse().forEach((r) => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b';
+        const statusClass = r.statusCode >= 400 ? 'text-red-600 font-semibold' : 'text-green-700';
+        tr.append(
+          cell(r.timestamp_mx),
+          cell(r.method, 'font-mono'),
+          cell(r.url, 'font-mono'),
+          cell(String(r.statusCode), statusClass),
+          cell(`${r.responseTimeMs} ms`)
+        );
+        body.appendChild(tr);
       });
+    }
+
+    function updateLatencyChart(rows) {
+      const labels = rows.map((r) => `${r.method} ${r.url}`);
+      const values = rows.map((r) => r.responseTimeMs);
+
+      if (!latencyChart) {
+        latencyChart = new Chart($('latencyChart').getContext('2d'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Tiempo de respuesta (ms)',
+              data: values,
+              borderColor: '#6366F1',
+              backgroundColor: 'rgba(99,102,241,0.15)',
+              fill: true,
+              tension: 0.3
+            }]
+          },
+          options: {
+            responsive: true,
+            scales: {
+              x: { ticks: { display: false } },
+              y: { beginAtZero: true, title: { display: true, text: 'ms' } }
+            }
+          }
+        });
+        return;
+      }
+      latencyChart.data.labels = labels;
+      latencyChart.data.datasets[0].data = values;
+      latencyChart.update();
     }
   </script>
 </body>

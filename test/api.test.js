@@ -178,6 +178,29 @@ describe('LOGS', () => {
   });
 });
 
+describe('STATS (alimenta el dashboard)', () => {
+  test('GET /stats/requests incluye la petición previa a /health con método, statusCode, tiempo y hora de México', async () => {
+    await request(app).get('/health');
+    const res = await request(app).get('/stats/requests');
+    expect(res.status).toBe(200);
+    const entry = res.body.data.find((r) => r.url === '/health');
+    expect(entry).toMatchObject({ method: 'GET', statusCode: 200 });
+    expect(typeof entry.responseTimeMs).toBe('number');
+    expect(entry.timestamp_mx).toMatch(/\d{1,2}\/\d{1,2}\/\d{4}/);
+  });
+
+  test('GET /stats/requests no se registra a sí mismo en el historial', async () => {
+    await request(app).get('/stats/requests');
+    const res = await request(app).get('/stats/requests');
+    expect(res.body.data.some((r) => r.url.startsWith('/stats'))).toBe(false);
+  });
+
+  test('GET /favicon.ico responde 204 para no generar 404 de ruido', async () => {
+    const res = await request(app).get('/favicon.ico');
+    expect(res.status).toBe(204);
+  });
+});
+
 describe('RUTAS NO EXISTENTES', () => {
   test('GET /ruta-inventada responde 404 con mensaje "Ruta no encontrada"', async () => {
     const res = await request(app).get('/ruta-inventada');

@@ -8,73 +8,78 @@ on:
 
 jobs:
   build-and-test:
-    name: Pruebas Automáticas (Jest & Playwright)
+    name: Pruebas y Publicación
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Código
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configurar Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Instalar pnpm
-        uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v4
         with:
-          version: '12.4.2'
+          version: 9
 
-      - name: Instalar Dependencias
+      - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
 
-      - name: Instalar Navegadores de Playwright
+      - name: Instalar navegadores de Playwright
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Ejecutar Pruebas Backend (Jest)
+      - name: Tests Backend (Jest)
+        id: jest
         run: pnpm test
 
-      - name: Ejecutar Pruebas Frontend E2E (Playwright)
+      - name: Tests E2E (Playwright)
+        id: playwright
         run: pnpm test:e2e
 
-      - name: Registrar ÉXITO de Pruebas en OpenObserve
-        if: success() && github.event_name == 'push'
-        run: |
-          curl -s -X POST "http://${{ secrets.EC2_HOST }}:5080/api/default/logs" \
-          -H "Content-Type: application/json" \
-          -u "${{ secrets.OPENOBSERVE_USER }}:${{ secrets.OPENOBSERVE_PASS }}" \
-          -d '[{
-            "_stream": "pipeline_logs",
-            "event": "TESTS_PASSED",
-            "commit": "${{ github.sha }}",
-            "author": "${{ github.actor }}",
-            "branch": "${{ github.ref_name }}",
-            "status": "SUCCESS"
-          }]' || true
+      # Un solo SSH: asegura OO + manda resultado (éxito o fallo) al stream pipeline_logs
+      - name: Registrar resultado de pruebas en OpenObserve
+        if: always() && github.event_name == 'push'
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: JEST_OUTCOME,PW_OUTCOME,COMMIT,ACTOR,BRANCH,OO_USER,OO_PASS
+          script: |
+            if ! sudo docker ps --format '{{.Names}}' | grep -q '^openobserve$'; then
+              sudo docker run -d --name openobserve -p 5080:5080 \
+                -e ZO_ROOT_USER_EMAIL="$OO_USER" \
+                -e ZO_ROOT_USER_PASSWORD="$OO_PASS" \
+                -v openobserve_data:/data --restart always \
+                openobserve/openobserve:latest
+              sleep 20
+            fi
+            if [ "$JEST_OUTCOME" = "success" ] && [ "$PW_OUTCOME" = "success" ]; then
+              EV=TESTS_PASSED; ST=SUCCESS
+            else
+              EV=TESTS_FAILED; ST=FAILED
+            fi
+            curl -sf -X POST "http://localhost:5080/api/default/pipeline_logs/_json" \
+              -H "Content-Type: application/json" -u "$OO_USER:$OO_PASS" \
+              -d "[{\"event\":\"$EV\",\"status\":\"$ST\",\"jest\":\"$JEST_OUTCOME\",\"playwright\":\"$PW_OUTCOME\",\"commit\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"branch\":\"$BRANCH\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
+        env:
+          JEST_OUTCOME: ${{ steps.jest.outcome }}
+          PW_OUTCOME: ${{ steps.playwright.outcome }}
+          COMMIT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          BRANCH: ${{ github.ref_name }}
+          OO_USER: ${{ secrets.OPENOBSERVE_USER }}
+          OO_PASS: ${{ secrets.OPENOBSERVE_PASS }}
 
-      - name: Registrar FALLO de Pruebas en OpenObserve
-        if: failure() && github.event_name == 'push'
-        run: |
-          curl -s -X POST "http://${{ secrets.EC2_HOST }}:5080/api/default/logs" \
-          -H "Content-Type: application/json" \
-          -u "${{ secrets.OPENOBSERVE_USER }}:${{ secrets.OPENOBSERVE_PASS }}" \
-          -d '[{
-            "_stream": "pipeline_logs",
-            "event": "TESTS_FAILED",
-            "commit": "${{ github.sha }}",
-            "author": "${{ github.actor }}",
-            "branch": "${{ github.ref_name }}",
-            "status": "FAILED"
-          }]' || true
-
-      - name: Iniciar sesión en Docker Hub
+      - name: Login en Docker Hub
         if: success() && github.event_name == 'push'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Construir y Subir Imagen a Docker Hub
+      - name: Construir y subir imagen
         if: success() && github.event_name == 'push'
         uses: docker/build-push-action@v5
         with:
@@ -85,54 +90,68 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
 
   deploy:
-    name: Despliegue Continuo en AWS EC2
+    name: Despliegue en AWS EC2
     needs: build-and-test
     if: github.event_name == 'push' && success()
     runs-on: ubuntu-latest
 
     steps:
-      - name: Despliegue por SSH a EC2
+      - name: Desplegar por SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: IMAGE_TAG,OO_USER,OO_PASS,COMMIT,ACTOR
           script: |
-            # 1. Asegurar contenedor de OpenObserve en el puerto 5080
-            if [ ! "$(sudo docker ps -q -f name=openobserve)" ]; then
-              sudo docker stop openobserve || true
-              sudo docker rm openobserve || true
-              sudo docker run -d \
-                --name openobserve \
-                -p 5080:5080 \
-                -e ZO_ROOT_USER_EMAIL="${{ secrets.OPENOBSERVE_USER }}" \
-                -e ZO_ROOT_USER_PASSWORD="${{ secrets.OPENOBSERVE_PASS }}" \
-                -v openobserve_data:/data \
-                --restart always \
-                openobserve/openobserve:latest
-            fi
+            set -e
 
-            # 2. Descargar y desplegar la versión de webapp vinculada al commit
-            sudo docker pull ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
-            sudo docker stop webapp-container || true
-            sudo docker rm webapp-container || true
-            sudo docker run -d \
-              --name webapp-container \
-              -p 80:3000 \
-              -p 6061:6061 \
+            sudo docker pull "$IMAGE_TAG"
+            sudo docker stop webapp-container 2>/dev/null || true
+            sudo docker rm   webapp-container 2>/dev/null || true
+            sudo docker run -d --name webapp-container \
+              --add-host=host.docker.internal:host-gateway \
+              -p 80:3000 -p 6061:6061 \
               -e PORT=3000 \
-              -e DB_PATH=./data.sqlite \
+              -e DB_PATH=/app/data/data.sqlite \
+              -e OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:5080/api/default \
+              -e OTEL_EXPORTER_OTLP_USER="$OO_USER" \
+              -e OTEL_EXPORTER_OTLP_PASS="$OO_PASS" \
+              -e OTEL_SERVICE_NAME=webapp-devops \
+              -v webapp_data:/app/data \
               --restart always \
-              ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
+              "$IMAGE_TAG"
 
-            # 3. Notificar evento de despliegue exitoso a OpenObserve
-            curl -s -X POST "http://localhost:5080/api/default/logs" \
-            -H "Content-Type: application/json" \
-            -u "${{ secrets.OPENOBSERVE_USER }}:${{ secrets.OPENOBSERVE_PASS }}" \
-            -d '[{
-              "_stream": "pipeline_logs",
-              "event": "DEPLOYMENT_SUCCESSFUL",
-              "commit": "${{ github.sha }}",
-              "container": "webapp-container",
-              "status": "DEPLOYED"
-            }]' || true
+            # Cron de métricas de infra (idempotente, corre cada minuto)
+            sudo mkdir -p /opt/monitor
+            cat <<'METRICS' | sudo tee /opt/monitor/metrics.sh > /dev/null
+            #!/bin/bash
+            CPU=$(awk '/^cpu /{u=$2+$4; t=$2+$3+$4+$5+$6+$7+$8; printf "%.2f", (u/t)*100}' /proc/stat)
+            RAM=$(free | awk '/Mem:/{printf "%.2f", ($3/$2)*100}')
+            NET=$(awk -F'[: ]+' '/eth0|ens|enp/ && !/lo/ {rx+=$2; tx+=$10} END {printf "%d", rx+tx}' /proc/net/dev)
+            if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+              TEMP=$(awk '{printf "%.1f", $1/1000}' /sys/class/thermal/thermal_zone0/temp)
+            else
+              TEMP=0
+            fi
+            curl -sf -X POST "http://localhost:5080/api/default/infra_metrics/_json" \
+              -H "Content-Type: application/json" -u "$OO_USER:$OO_PASS" \
+              -d "[{\"timestamp\":\"$(date -u +%FT%TZ)\",\"cpu_percent\":$CPU,\"ram_percent\":$RAM,\"network_bytes\":$NET,\"temperature_c\":$TEMP}]"
+            METRICS
+            sudo chmod +x /opt/monitor/metrics.sh
+            sudo crontab -l 2>/dev/null | grep -v metrics.sh > /tmp/cron.txt || true
+            echo "* * * * * OO_USER=$OO_USER OO_PASS=$OO_PASS /opt/monitor/metrics.sh" >> /tmp/cron.txt
+            sudo crontab /tmp/cron.txt
+
+            curl -sf -X POST "http://localhost:5080/api/default/pipeline_logs/_json" \
+              -H "Content-Type: application/json" -u "$OO_USER:$OO_PASS" \
+              -d "[{\"event\":\"DEPLOYMENT_SUCCESSFUL\",\"status\":\"DEPLOYED\",\"image\":\"$IMAGE_TAG\",\"commit\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
+
+            sleep 5
+            curl -sf http://localhost/health | grep -q '"status":"OK"'
+        env:
+          IMAGE_TAG: ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
+          OO_USER: ${{ secrets.OPENOBSERVE_USER }}
+          OO_PASS: ${{ secrets.OPENOBSERVE_PASS }}
+          COMMIT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
