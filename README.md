@@ -38,7 +38,7 @@ No se genera reporte HTML/PDF de Playwright: el reporter es solo `list` y `trace
 | `OPENOBSERVE_USER` / `OPENOBSERVE_PASS` | Email y contraseña del usuario root de OpenObserve. |
 | `OPENOBSERVE_URL` | Opcional: URL pública de OpenObserve para el runner (ej. `http://IP:5080`). Por defecto `http://EC2_HOST:5080`. Dentro de la EC2 el pipeline usa `http://localhost:5080`. |
 
-Si OpenObserve solo escucha en `localhost`, el pipeline necesita `OPENOBSERVE_URL` accesible desde el runner o abrir el puerto TCP 5080 en el Security Group de EC2. Si el `curl` termina con `exit code 28` (timeout), ese es el motivo: el evento no se registra, pero el paso usa `continue-on-error` y no cancela el job.
+Si OpenObserve solo escucha en `localhost`, el pipeline necesita `OPENOBSERVE_URL` accesible desde el runner o abrir el puerto TCP 5080 en el Security Group de EC2. Si el `curl` del runner termina con `exit code 28` (timeout), ese es el motivo: el evento no se registra, pero ese paso usa `continue-on-error` y no cancela el job. En el deploy dentro de la EC2, un `exit code 22` significa respuesta HTTP 4xx/5xx; los mensajes `=== Verificando ... ===` indican qué check falló.
 
 ## Flujo del pipeline (`.github/workflows/main.yml`)
 
@@ -66,6 +66,23 @@ OpenObserve es un backend de observabilidad: recibe **logs**, **métricas** y **
 - Caída de `DEPLOYMENT_SUCCESSFUL` tras un `TESTS_PASSED` → revisar el job de deploy.
 
 > Nota: las instancias EC2 no exponen sensor térmico al sistema operativo. Si no existe `thermal_zone0` ni `hwmon`, el script reporta `temperature_c = 0` (sin dato), no un valor inventado.
+
+## Troubleshooting en EC2
+
+- `exit code 22` en el deploy: `curl` recibió HTTP 4xx/5xx. El log marca si fue `Verificando health` o `Registrando despliegue`; en el segundo caso se muestra el código y el cuerpo devueltos.
+- `exit code 28`: timeout de conexión. En el runner significa que el puerto 5080 no es alcanzable; dentro de la EC2 significa que OpenObserve no levantó.
+- `no space left on device`: el pipeline ya limpia imágenes y build cache sin borrar `openobserve_data`. Si vuelve a aparecer, amplía el volumen EBS.
+
+Comandos manuales en la EC2 (las credenciales están en `/opt/monitor/oo.env`):
+
+```bash
+sudo cat /opt/monitor/oo.env
+curl -i http://127.0.0.1/health
+sudo docker logs --tail 100 webapp-container
+sudo docker logs --tail 50 openobserve
+sudo ss -ltnp | grep -E ':80|:5080'
+df -h /
+```
 
 ## Ejecución local
 

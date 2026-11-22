@@ -126,7 +126,8 @@ jobs:
             echo "=== Espacio antes de limpiar ==="
             df -h / | tail -n 1
             sudo docker system df 2>/dev/null || true
-            sudo docker system prune -af >/dev/null 2>&1 || true
+            sudo docker image prune -af >/dev/null 2>&1 || true
+            sudo docker builder prune -af >/dev/null 2>&1 || true
             REPO=${IMAGE_TAG%:*}
             sudo docker images --format '{{.ID}} {{.Repository}}:{{.Tag}}' \
               | awk -v repo="$REPO" 'index($2, repo ":") == 1 && !seen[$1]++ {print $1}' \
@@ -144,6 +145,30 @@ jobs:
                 -v openobserve_data:/data --restart always \
                 openobserve/openobserve:latest
               sleep 20
+            fi
+
+            echo "=== Verificando OpenObserve ==="
+            OO_CODE=""
+            for i in $(seq 1 30); do
+              OO_CODE=$(curl -sL -o /dev/null -w '%{http_code}' http://localhost:5080/ || true)
+              [ "$OO_CODE" = "200" ] && break
+              sleep 2
+            done
+            if [ "$OO_CODE" != "200" ]; then
+              echo "OpenObserve no respondió en http://localhost:5080 (code=$OO_CODE)"
+              sudo docker logs --tail 50 openobserve || true
+              exit 1
+            fi
+            OO_PROBE_PAYLOAD="[{\"event\":\"DEPLOY_PROBE\",\"status\":\"OK\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
+            OO_PROBE_CODE=$(curl -s -o /tmp/o2-probe.out -w '%{http_code}' -X POST \
+              "$OO_URL/api/default/pipeline_logs/_json" \
+              -H "Content-Type: application/json" \
+              -u "$OO_USER:$OO_PASS" \
+              -d "$OO_PROBE_PAYLOAD" || true)
+            if [ "$OO_PROBE_CODE" != "200" ] && [ "$OO_PROBE_CODE" != "201" ] && [ "$OO_PROBE_CODE" != "204" ]; then
+              echo "OpenObserve rechazó el probe (code=$OO_PROBE_CODE): $(cat /tmp/o2-probe.out 2>/dev/null)"
+              echo "Revisa OPENOBSERVE_USER/OPENOBSERVE_PASS vs el volumen openobserve_data"
+              exit 1
             fi
 
             # --- Aplicación: nueva imagen por hash de commit ---
@@ -174,12 +199,55 @@ jobs:
             sudo crontab /tmp/oo-cron
 
             # --- Verificación y evento de despliegue ---
-            sleep 5
-            curl -sf http://localhost/health | grep -q '"status":"OK"'
-            curl -sf -X POST "$OO_URL/api/default/pipeline_logs/_json" \
+            echo "=== Verificando container ==="
+            WEBAPP_ID=$(sudo docker ps -q --filter name=webapp-container --filter status=running)
+            if [ -z "$WEBAPP_ID" ]; then
+              echo "webapp-container no está corriendo"
+              sudo docker ps -a --filter name=webapp-container || true
+              sudo docker logs --tail 100 webapp-container || true
+              exit 1
+            fi
+
+            echo "=== Verificando health ==="
+            HEALTH_CODE=""
+            for i in $(seq 1 15); do
+              HEALTH_CODE=$(curl -s -o /tmp/health.out -w '%{http_code}' http://127.0.0.1/health || true)
+              if [ "$HEALTH_CODE" = "200" ] && grep -q '"status":"OK"' /tmp/health.out; then
+                break
+              fi
+              sleep 2
+            done
+            if [ "$HEALTH_CODE" != "200" ] || ! grep -q '"status":"OK"' /tmp/health.out; then
+              echo "Health check falló (code=$HEALTH_CODE): $(cat /tmp/health.out 2>/dev/null)"
+              sudo ss -ltnp 2>/dev/null | grep -E ':80|:3000' || true
+              sudo docker logs --tail 100 webapp-container || true
+              exit 1
+            fi
+            cat /tmp/health.out
+
+            echo "=== Registrando despliegue ==="
+            OO_DEPLOY_PAYLOAD="[{\"event\":\"DEPLOYMENT_SUCCESSFUL\",\"status\":\"DEPLOYED\",\"image\":\"$IMAGE_TAG\",\"commit_sha\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
+            OO_DEPLOY_CODE=$(curl -s -o /tmp/o2-deploy.out -w '%{http_code}' -X POST \
+              "$OO_URL/api/default/pipeline_logs/_json" \
               -H "Content-Type: application/json" \
               -u "$OO_USER:$OO_PASS" \
-              -d "[{\"event\":\"DEPLOYMENT_SUCCESSFUL\",\"status\":\"DEPLOYED\",\"image\":\"$IMAGE_TAG\",\"commit_sha\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
+              -d "$OO_DEPLOY_PAYLOAD" || true)
+            if [ "$OO_DEPLOY_CODE" != "200" ] && [ "$OO_DEPLOY_CODE" != "201" ] && [ "$OO_DEPLOY_CODE" != "204" ]; then
+              echo "Reintentando evento de despliegue (code=$OO_DEPLOY_CODE)"
+              sleep 10
+              OO_DEPLOY_CODE=$(curl -s -o /tmp/o2-deploy.out -w '%{http_code}' -X POST \
+                "$OO_URL/api/default/pipeline_logs/_json" \
+                -H "Content-Type: application/json" \
+                -u "$OO_USER:$OO_PASS" \
+                -d "$OO_DEPLOY_PAYLOAD" || true)
+            fi
+            case "$OO_DEPLOY_CODE" in
+              200|201|204) ;;
+              *)
+                echo "No se pudo registrar DEPLOYMENT_SUCCESSFUL (code=$OO_DEPLOY_CODE): $(cat /tmp/o2-deploy.out 2>/dev/null)"
+                exit 1
+                ;;
+            esac
             echo "Despliegue verificado y registrado en OpenObserve"
             sudo docker image prune -af >/dev/null 2>&1 || true
         env:
