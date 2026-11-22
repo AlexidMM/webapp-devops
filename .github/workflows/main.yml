@@ -237,11 +237,13 @@ jobs:
             # --- Cron de métricas de infra (idempotente, cada minuto) ---
             sudo mkdir -p /opt/monitor
             sudo install -m 700 /home/ubuntu/monitor/metrics.sh /opt/monitor/metrics.sh
+            sudo install -m 700 /home/ubuntu/monitor/app-logs.sh /opt/monitor/app-logs.sh
             printf "OO_USER='%s'\nOO_PASS='%s'\nOO_URL='%s'\n" \
               "$OO_USER" "$OO_PASS_EFFECTIVE" "$OO_URL" | sudo tee /opt/monitor/oo.env > /dev/null
             sudo chmod 600 /opt/monitor/oo.env
-            sudo crontab -l 2>/dev/null | grep -v '/opt/monitor/metrics.sh' > /tmp/oo-cron || true
+            sudo crontab -l 2>/dev/null | grep -Ev '/opt/monitor/(metrics|app-logs).sh' > /tmp/oo-cron || true
             echo '* * * * * /opt/monitor/metrics.sh' >> /tmp/oo-cron
+            echo '* * * * * /opt/monitor/app-logs.sh' >> /tmp/oo-cron
             sudo crontab /tmp/oo-cron
 
             # --- Verificación y evento de despliegue ---

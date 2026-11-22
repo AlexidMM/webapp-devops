@@ -395,20 +395,25 @@
         {
           "id": "Panel_02_04",
           "type": "line",
-          "title": "Peticiones por segundo y endpoint",
-          "description": "Métrica OpenTelemetry http_requests_total consultada con PromQL",
-          "config": {"show_legends": true, "legends_position": "bottom", "unit": "ops", "decimals": 2, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
-          "queryType": "promql",
+          "title": "Peticiones por minuto y endpoint",
+          "description": "Volumen de respuestas agrupadas por endpoint desde app_logs",
+          "config": {"show_legends": true, "legends_position": "bottom", "unit": "short", "decimals": 0, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
           "queries": [{
-            "query": "sum by (route) (rate(http_requests_total[5m]))",
+            "query": "SELECT histogram(_timestamp) as x_axis_1, route as x_axis_2, count(_timestamp) as y_axis_1 FROM app_logs GROUP BY x_axis_1, x_axis_2 ORDER BY x_axis_1 ASC",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
-              "stream": "http_requests_total", "stream_type": "metrics",
-              "x": [], "y": [], "z": [], "breakdown": [],
+              "stream": "app_logs", "stream_type": "logs",
+              "x": [
+                {"label": "Hora", "alias": "x_axis_1", "column": "_timestamp", "color": null, "aggregationFunction": "histogram", "sortBy": "ASC"},
+                {"label": "Endpoint", "alias": "x_axis_2", "column": "route", "color": null}
+              ],
+              "y": [{"label": "Peticiones", "alias": "y_axis_1", "column": "_timestamp", "color": "#3b82f6", "aggregationFunction": "count"}],
+              "z": [], "breakdown": [],
               "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
             },
-            "config": {"promql_legend": "{route}"}
+            "config": {"promql_legend": ""}
           }],
           "layout": {"x": 0, "y": 19, "w": 24, "h": 9, "i": 7},
           "htmlContent": "", "markdownContent": ""
@@ -416,20 +421,22 @@
         {
           "id": "Panel_02_05",
           "type": "line",
-          "title": "Tasa de errores HTTP por segundo",
-          "description": "Métrica OpenTelemetry http_errors_total (statusCode >= 400) consultada con PromQL",
-          "config": {"show_legends": true, "legends_position": "bottom", "unit": "ops", "decimals": 2, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
-          "queryType": "promql",
+          "title": "Errores HTTP por minuto",
+          "description": "Respuestas con statusCode >= 400 en app_logs",
+          "config": {"show_legends": true, "legends_position": "bottom", "unit": "short", "decimals": 0, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
           "queries": [{
-            "query": "sum(rate(http_errors_total[5m]))",
+            "query": "SELECT histogram(_timestamp) as x_axis_1, count(_timestamp) as y_axis_1 FROM app_logs WHERE statusCode >= 400 GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
-              "stream": "http_errors_total", "stream_type": "metrics",
-              "x": [], "y": [], "z": [], "breakdown": [],
+              "stream": "app_logs", "stream_type": "logs",
+              "x": [{"label": "Hora", "alias": "x_axis_1", "column": "_timestamp", "color": null, "aggregationFunction": "histogram", "sortBy": "ASC"}],
+              "y": [{"label": "Errores", "alias": "y_axis_1", "column": "_timestamp", "color": "#ef4444", "aggregationFunction": "count"}],
+              "z": [], "breakdown": [],
               "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
             },
-            "config": {"promql_legend": "errores"}
+            "config": {"promql_legend": ""}
           }],
           "layout": {"x": 24, "y": 19, "w": 24, "h": 9, "i": 8},
           "htmlContent": "", "markdownContent": ""

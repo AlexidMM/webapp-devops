@@ -17,6 +17,7 @@ webapp-devops/
 ├── Dockerfile                 node:20-alpine + pnpm 12.4.2
 ├── pnpm-workspace.yaml        allowBuilds para sqlite3 / protobufjs
 ├── monitor/metrics.sh         métricas de EC2 -> infra_metrics
+├── monitor/app-logs.sh        logs JSON del contenedor -> app_logs
 ├── openobserve/dashboard.json dashboard importable
 ├── openobserve/setup-alerts.sh crea destino webhook y 4 alertas por API
 └── .github/workflows/main.yml CI, publicación y deploy
@@ -121,10 +122,11 @@ UI: `http://<EC2_HOST>:5080`.
 | Stream | Contenido |
 |---|---|
 | `pipeline_logs` | `TESTS_PASSED`, `TESTS_FAILED`, `DEPLOYMENT_SUCCESSFUL`. |
-| `app_logs` | logs JSON de la API con `trace_id` / `span_id`. |
+| `app_logs` | logs JSON de la API con `trace_id` / `span_id`, enviados por `/opt/monitor/app-logs.sh`. |
 | `app_traces` | trazas HTTP, Express y SQLite. |
-| `http_requests_total`, `http_errors_total`, `http_request_duration_ms` | métricas de la app. |
 | `infra_metrics` | CPU, RAM, red, temperatura, disco y host de la EC2. |
+
+> `app_logs` se completa con un cron que publica los logs JSON del contenedor porque el exportador OTLP de logs de esta versión no envía al stream. Las gráficas de aplicación consultan `app_logs` y `app_traces`.
 
 El dashboard está en `openobserve/dashboard.json` dentro del repositorio. En tu máquina:
 
