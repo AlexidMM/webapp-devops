@@ -155,6 +155,7 @@ jobs:
               sudo docker run -d --name openobserve -p 5080:5080 \
                 -e ZO_ROOT_USER_EMAIL="$OO_USER" \
                 -e ZO_ROOT_USER_PASSWORD="$OO_PASS_EFFECTIVE" \
+                -e ZO_SSRF_ALLOW_LOOPBACK=true \
                 -v openobserve_data:/data --restart always \
                 openobserve/openobserve:latest >/dev/null
             }

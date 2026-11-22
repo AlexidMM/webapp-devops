@@ -18,6 +18,7 @@ webapp-devops/
 ├── pnpm-workspace.yaml        allowBuilds para sqlite3 / protobufjs
 ├── monitor/metrics.sh         métricas de EC2 -> infra_metrics
 ├── openobserve/dashboard.json dashboard importable
+├── openobserve/setup-alerts.sh crea destino webhook y 4 alertas por API
 └── .github/workflows/main.yml CI, publicación y deploy
 ```
 
@@ -125,8 +126,26 @@ UI: `http://<EC2_HOST>:5080`.
 | `http_requests_total`, `http_errors_total`, `http_request_duration_ms` | métricas de la app. |
 | `infra_metrics` | CPU, RAM, red, temperatura, disco y host de la EC2. |
 
-En *Dashboards > Import* sube `openobserve/dashboard.json`. Tiene tres pestañas: CI/CD, Aplicación e Infraestructura.
+El dashboard está en `openobserve/dashboard.json` dentro del repositorio. En tu máquina:
 
-Alertas sugeridas: `TESTS_FAILED` en 5 min, `status_code >= 500` en `app_logs`, `cpu_percent > 85` o `ram_percent > 90` en `infra_metrics`, y ausencia de `DEPLOYMENT_SUCCESSFUL` tras un `TESTS_PASSED`.
+```bash
+git clone https://github.com/AlexidMM/webapp-devops.git
+cd webapp-devops
+cat openobserve/dashboard.json
+```
+
+En OpenObserve ve a *Dashboards > Import* y sube ese archivo. Tiene tres pestañas: CI/CD, Aplicación e Infraestructura.
+
+Las alertas se crean por API con el script `openobserve/setup-alerts.sh`. Cópialo a la EC2 y ejecútalo:
+
+```bash
+scp -i <llave.pem> openobserve/setup-alerts.sh ubuntu@<EC2_HOST>:/home/ubuntu/
+ssh -i <llave.pem> ubuntu@<EC2_HOST>
+bash /home/ubuntu/setup-alerts.sh
+```
+
+El script crea un destino webhook `oo_pipeline` que publica los disparos como eventos `ALERT_FIRED` en `pipeline_logs`, más cuatro reglas: `TESTS_FAILED`, `statusCode >= 500`, `cpu_percent > 85` y `ram_percent > 90`. No requiere SMTP ni correo. El workflow ya levanta OpenObserve con `ZO_SSRF_ALLOW_LOOPBACK=true` para permitir ese webhook interno.
 
 > Las EC2 no suelen exponer sensor térmico. Si no hay `thermal_zone0` ni `hwmon`, `temperature_c` se reporta en `0` (sin dato).
+
+> *Database monitoring > Live sessions* está pensado para motores con tabla de sesiones (PostgreSQL/MySQL) y un collector que la consulte. SQLite es embebido y no expone esa tabla, así que ese panel no se poblará. Las consultas sí aparecen en *Top queries*, en *Traces* como spans `sqlite all/run/get` y en `app_logs`, que es la evidencia de RF-04.
