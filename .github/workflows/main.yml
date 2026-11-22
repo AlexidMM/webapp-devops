@@ -123,6 +123,17 @@ jobs:
           script: |
             set -e
 
+            echo "=== Espacio antes de limpiar ==="
+            df -h / | tail -n 1
+            sudo docker system df 2>/dev/null || true
+            sudo docker system prune -af >/dev/null 2>&1 || true
+            REPO=${IMAGE_TAG%:*}
+            sudo docker images --format '{{.ID}} {{.Repository}}:{{.Tag}}' \
+              | awk -v repo="$REPO" 'index($2, repo ":") == 1 && !seen[$1]++ {print $1}' \
+              | tail -n +3 | xargs -r sudo docker rmi -f >/dev/null 2>&1 || true
+            echo "=== Espacio después de limpiar ==="
+            df -h / | tail -n 1
+
             # --- OpenObserve: se asegura de que esté corriendo en la EC2 ---
             if sudo docker ps -a --format '{{.Names}}' | grep -q '^openobserve$'; then
               sudo docker start openobserve > /dev/null || true
@@ -170,6 +181,7 @@ jobs:
               -u "$OO_USER:$OO_PASS" \
               -d "[{\"event\":\"DEPLOYMENT_SUCCESSFUL\",\"status\":\"DEPLOYED\",\"image\":\"$IMAGE_TAG\",\"commit_sha\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
             echo "Despliegue verificado y registrado en OpenObserve"
+            sudo docker image prune -af >/dev/null 2>&1 || true
         env:
           IMAGE_TAG: ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
           OO_USER: ${{ secrets.OPENOBSERVE_USER }}
