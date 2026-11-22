@@ -69,7 +69,8 @@ OpenObserve es un backend de observabilidad: recibe **logs**, **métricas** y **
 
 ## Troubleshooting en EC2
 
-- `exit code 22` en el deploy: `curl` recibió HTTP 4xx/5xx. El log marca si fue `Verificando health` o `Registrando despliegue`; en el segundo caso se muestra el código y el cuerpo devueltos.
+- `exit code 22` en el deploy: `curl` recibió HTTP 4xx/5xx. El log marca si fue `Verificando OpenObserve`, `Verificando health` o `Registrando despliegue`; en cada caso se muestra el código y el cuerpo devueltos.
+- `code=401` en `Verificando OpenObserve`: los secrets no coinciden con el usuario root guardado en `openobserve_data` (OpenObserve solo aplica `ZO_ROOT_USER_*` al crear el volumen). El pipeline elimina y recrea ese volumen con los secretos actuales; **se pierden los datos previos de OpenObserve**. Si quieres conservarlos, actualiza la contraseña root desde la UI antes de cambiar el secret.
 - `exit code 28`: timeout de conexión. En el runner significa que el puerto 5080 no es alcanzable; dentro de la EC2 significa que OpenObserve no levantó.
 - `no space left on device`: el pipeline ya limpia imágenes y build cache sin borrar `openobserve_data`. Si vuelve a aparecer, amplía el volumen EBS.
 

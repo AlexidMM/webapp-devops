@@ -148,28 +148,52 @@ jobs:
             fi
 
             echo "=== Verificando OpenObserve ==="
-            OO_CODE=""
-            for i in $(seq 1 30); do
-              OO_CODE=$(curl -sL -o /dev/null -w '%{http_code}' http://localhost:5080/ || true)
-              [ "$OO_CODE" = "200" ] && break
-              sleep 2
-            done
-            if [ "$OO_CODE" != "200" ]; then
+            oo_wait() {
+              for i in $(seq 1 30); do
+                OO_CODE=$(curl -sL -o /dev/null -w '%{http_code}' http://localhost:5080/ || true)
+                [ "$OO_CODE" = "200" ] && return 0
+                sleep 2
+              done
+              return 1
+            }
+            oo_probe() {
+              OO_PROBE_PAYLOAD="[{\"event\":\"DEPLOY_PROBE\",\"status\":\"OK\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
+              curl -s -o /tmp/o2-probe.out -w '%{http_code}' -X POST \
+                "$OO_URL/api/default/pipeline_logs/_json" \
+                -H "Content-Type: application/json" \
+                -u "$OO_USER:$OO_PASS" \
+                -d "$OO_PROBE_PAYLOAD" || true
+            }
+            if ! oo_wait; then
               echo "OpenObserve no respondió en http://localhost:5080 (code=$OO_CODE)"
               sudo docker logs --tail 50 openobserve || true
               exit 1
             fi
-            OO_PROBE_PAYLOAD="[{\"event\":\"DEPLOY_PROBE\",\"status\":\"OK\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
-            OO_PROBE_CODE=$(curl -s -o /tmp/o2-probe.out -w '%{http_code}' -X POST \
-              "$OO_URL/api/default/pipeline_logs/_json" \
-              -H "Content-Type: application/json" \
-              -u "$OO_USER:$OO_PASS" \
-              -d "$OO_PROBE_PAYLOAD" || true)
-            if [ "$OO_PROBE_CODE" != "200" ] && [ "$OO_PROBE_CODE" != "201" ] && [ "$OO_PROBE_CODE" != "204" ]; then
-              echo "OpenObserve rechazó el probe (code=$OO_PROBE_CODE): $(cat /tmp/o2-probe.out 2>/dev/null)"
-              echo "Revisa OPENOBSERVE_USER/OPENOBSERVE_PASS vs el volumen openobserve_data"
-              exit 1
+            OO_PROBE_CODE=$(oo_probe)
+            if [ "$OO_PROBE_CODE" = "401" ] || [ "$OO_PROBE_CODE" = "403" ]; then
+              echo "Credenciales root desincronizadas: recreando openobserve_data con OPENOBSERVE_USER/OPENOBSERVE_PASS"
+              echo "Advertencia: se pierden los datos previos de OpenObserve en este volumen"
+              sudo docker rm -f openobserve >/dev/null 2>&1 || true
+              sudo docker volume rm openobserve_data >/dev/null 2>&1 || true
+              sudo docker run -d --name openobserve -p 5080:5080 \
+                -e ZO_ROOT_USER_EMAIL="$OO_USER" \
+                -e ZO_ROOT_USER_PASSWORD="$OO_PASS" \
+                -v openobserve_data:/data --restart always \
+                openobserve/openobserve:latest
+              if ! oo_wait; then
+                echo "OpenObserve no respondió tras recrearlo (code=$OO_CODE)"
+                sudo docker logs --tail 50 openobserve || true
+                exit 1
+              fi
+              OO_PROBE_CODE=$(oo_probe)
             fi
+            case "$OO_PROBE_CODE" in
+              200|201|204) ;;
+              *)
+                echo "OpenObserve rechazó el probe (code=$OO_PROBE_CODE): $(cat /tmp/o2-probe.out 2>/dev/null)"
+                exit 1
+                ;;
+            esac
 
             # --- Aplicación: nueva imagen por hash de commit ---
             sudo docker pull "$IMAGE_TAG"
