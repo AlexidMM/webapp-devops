@@ -1,4 +1,5 @@
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
+import { trace } from '@opentelemetry/api';
 
 const otelLogger = logs.getLogger('webapp-devops');
 
@@ -28,10 +29,16 @@ export function log(level, message, attributes = {}) {
     console.log(JSON.stringify(record));
   }
 
+  const spanContext = trace.getActiveSpan()?.spanContext();
+
   otelLogger.emit({
     severityNumber: SEVERITY[level] ?? SeverityNumber.INFO,
     severityText: level.toUpperCase(),
     body: message,
-    attributes: { timestamp_mx: record.timestamp_mx, ...attributes },
+    attributes: {
+      timestamp_mx: record.timestamp_mx,
+      ...(spanContext ? { trace_id: spanContext.traceId, span_id: spanContext.spanId } : {}),
+      ...attributes,
+    },
   });
 }

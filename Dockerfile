@@ -1,7 +1,7 @@
 # ---------- Etapa 1: deps (compila sqlite3) ----------
 FROM node:20-alpine AS deps
 WORKDIR /app
-RUN apk add --no-cache python3 make g++ && npm install -g pnpm@9
+RUN apk add --no-cache python3 make g++ && npm install -g pnpm@12.4.2
 COPY package.json pnpm-lock.yaml ./
 ENV npm_config_build_from_source=true
 RUN pnpm install --frozen-lockfile --prod

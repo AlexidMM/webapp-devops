@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-and-test:
-    name: Pruebas y Publicación
+    name: Pruebas, registro y publicación
     runs-on: ubuntu-latest
 
     steps:
@@ -18,6 +18,8 @@ jobs:
         with:
           node-version: '20'
 
+      # pnpm/action-setup v4 lee "packageManager" de package.json (pnpm@12.4.2).
+      # No declarar "version:" aquí para evitar ERR_PNPM_BAD_PM_VERSION.
       - uses: pnpm/action-setup@v4
 
       - name: Instalar dependencias
@@ -34,41 +36,43 @@ jobs:
         id: playwright
         run: pnpm test:e2e
 
-      # Un solo SSH: asegura OO + manda resultado (éxito o fallo) al stream pipeline_logs
+      # Se envía por HTTP directo al runner: si hay fallo NO se abre ninguna
+      # conexión SSH hacia la EC2 ( RF-02 / Criterio de aceptación 1 ).
       - name: Registrar resultado de pruebas en OpenObserve
         if: always() && github.event_name == 'push'
         continue-on-error: true
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          envs: JEST_OUTCOME,PW_OUTCOME,COMMIT,ACTOR,BRANCH,OO_USER,OO_PASS
-          script: |
-            if ! sudo docker ps --format '{{.Names}}' | grep -q '^openobserve$'; then
-              sudo docker run -d --name openobserve -p 5080:5080 \
-                -e ZO_ROOT_USER_EMAIL="$OO_USER" \
-                -e ZO_ROOT_USER_PASSWORD="$OO_PASS" \
-                -v openobserve_data:/data --restart always \
-                openobserve/openobserve:latest
-              sleep 20
-            fi
-            if [ "$JEST_OUTCOME" = "success" ] && [ "$PW_OUTCOME" = "success" ]; then
-              EV=TESTS_PASSED; ST=SUCCESS
-            else
-              EV=TESTS_FAILED; ST=FAILED
-            fi
-            curl -sf -X POST "http://localhost:5080/api/default/pipeline_logs/_json" \
-              -H "Content-Type: application/json" -u "$OO_USER:$OO_PASS" \
-              -d "[{\"event\":\"$EV\",\"status\":\"$ST\",\"jest\":\"$JEST_OUTCOME\",\"playwright\":\"$PW_OUTCOME\",\"commit\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"branch\":\"$BRANCH\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
         env:
           JEST_OUTCOME: ${{ steps.jest.outcome }}
           PW_OUTCOME: ${{ steps.playwright.outcome }}
           COMMIT: ${{ github.sha }}
           ACTOR: ${{ github.actor }}
           BRANCH: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           OO_USER: ${{ secrets.OPENOBSERVE_USER }}
           OO_PASS: ${{ secrets.OPENOBSERVE_PASS }}
+          OO_URL: ${{ secrets.OPENOBSERVE_URL || format('http://{0}:5080', secrets.EC2_HOST) }}
+        run: |
+          set -e
+          if [ "$JEST_OUTCOME" = "success" ] && [ "$PW_OUTCOME" = "success" ]; then
+            EVENT=TESTS_PASSED; STATUS=SUCCESS
+          else
+            EVENT=TESTS_FAILED; STATUS=FAILED
+          fi
+          jq -n \
+            --arg event "$EVENT" --arg status "$STATUS" \
+            --arg jest "$JEST_OUTCOME" --arg playwright "$PW_OUTCOME" \
+            --arg commit_sha "$COMMIT" --arg actor "$ACTOR" --arg branch "$BRANCH" \
+            --arg run_id "$RUN_ID" --arg run_url "$RUN_URL" \
+            --arg timestamp "$(date -u +%FT%TZ)" \
+            '[{event:$event, status:$status, jest:$jest, playwright:$playwright,
+               commit_sha:$commit_sha, actor:$actor, branch:$branch,
+               run_id:$run_id, run_url:$run_url, timestamp:$timestamp}]' > /tmp/o2-test-event.json
+          curl -sf -X POST "$OO_URL/api/default/pipeline_logs/_json" \
+            -H "Content-Type: application/json" \
+            -u "$OO_USER:$OO_PASS" \
+            --data-binary @/tmp/o2-test-event.json
+          echo "Evento $EVENT enviado a OpenObserve ($OO_URL)"
 
       - name: Login en Docker Hub
         if: success() && github.event_name == 'push'
@@ -94,16 +98,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Desplegar por SSH
+      - uses: actions/checkout@v4
+
+      - name: Copiar script de métricas de infraestructura
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: monitor/metrics.sh
+          target: /home/ubuntu
+
+      - name: Desplegar aplicación y configurar observabilidad en EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: IMAGE_TAG,OO_USER,OO_PASS,COMMIT,ACTOR
+          envs: IMAGE_TAG,OO_USER,OO_PASS,OO_URL,COMMIT,ACTOR
           script: |
             set -e
 
+            # --- OpenObserve: se asegura de que esté corriendo en la EC2 ---
+            if sudo docker ps -a --format '{{.Names}}' | grep -q '^openobserve$'; then
+              sudo docker start openobserve > /dev/null || true
+            else
+              sudo docker run -d --name openobserve -p 5080:5080 \
+                -e ZO_ROOT_USER_EMAIL="$OO_USER" \
+                -e ZO_ROOT_USER_PASSWORD="$OO_PASS" \
+                -v openobserve_data:/data --restart always \
+                openobserve/openobserve:latest
+              sleep 20
+            fi
+
+            # --- Aplicación: nueva imagen por hash de commit ---
             sudo docker pull "$IMAGE_TAG"
             sudo docker stop webapp-container 2>/dev/null || true
             sudo docker rm   webapp-container 2>/dev/null || true
@@ -120,36 +148,28 @@ jobs:
               --restart always \
               "$IMAGE_TAG"
 
-            # Cron de métricas de infra (idempotente, corre cada minuto)
+            # --- Cron de métricas de infra (idempotente, cada minuto) ---
             sudo mkdir -p /opt/monitor
-            cat <<'METRICS' | sudo tee /opt/monitor/metrics.sh > /dev/null
-            #!/bin/bash
-            CPU=$(awk '/^cpu /{u=$2+$4; t=$2+$3+$4+$5+$6+$7+$8; printf "%.2f", (u/t)*100}' /proc/stat)
-            RAM=$(free | awk '/Mem:/{printf "%.2f", ($3/$2)*100}')
-            NET=$(awk -F'[: ]+' '/eth0|ens|enp/ && !/lo/ {rx+=$2; tx+=$10} END {printf "%d", rx+tx}' /proc/net/dev)
-            if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
-              TEMP=$(awk '{printf "%.1f", $1/1000}' /sys/class/thermal/thermal_zone0/temp)
-            else
-              TEMP=0
-            fi
-            curl -sf -X POST "http://localhost:5080/api/default/infra_metrics/_json" \
-              -H "Content-Type: application/json" -u "$OO_USER:$OO_PASS" \
-              -d "[{\"timestamp\":\"$(date -u +%FT%TZ)\",\"cpu_percent\":$CPU,\"ram_percent\":$RAM,\"network_bytes\":$NET,\"temperature_c\":$TEMP}]"
-            METRICS
-            sudo chmod +x /opt/monitor/metrics.sh
-            sudo crontab -l 2>/dev/null | grep -v metrics.sh > /tmp/cron.txt || true
-            echo "* * * * * OO_USER=$OO_USER OO_PASS=$OO_PASS /opt/monitor/metrics.sh" >> /tmp/cron.txt
-            sudo crontab /tmp/cron.txt
+            sudo install -m 700 /home/ubuntu/monitor/metrics.sh /opt/monitor/metrics.sh
+            printf "OO_USER='%s'\nOO_PASS='%s'\nOO_URL='%s'\n" \
+              "$OO_USER" "$OO_PASS" "$OO_URL" | sudo tee /opt/monitor/oo.env > /dev/null
+            sudo chmod 600 /opt/monitor/oo.env
+            sudo crontab -l 2>/dev/null | grep -v '/opt/monitor/metrics.sh' > /tmp/oo-cron || true
+            echo '* * * * * /opt/monitor/metrics.sh' >> /tmp/oo-cron
+            sudo crontab /tmp/oo-cron
 
-            curl -sf -X POST "http://localhost:5080/api/default/pipeline_logs/_json" \
-              -H "Content-Type: application/json" -u "$OO_USER:$OO_PASS" \
-              -d "[{\"event\":\"DEPLOYMENT_SUCCESSFUL\",\"status\":\"DEPLOYED\",\"image\":\"$IMAGE_TAG\",\"commit\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
-
+            # --- Verificación y evento de despliegue ---
             sleep 5
             curl -sf http://localhost/health | grep -q '"status":"OK"'
+            curl -sf -X POST "$OO_URL/api/default/pipeline_logs/_json" \
+              -H "Content-Type: application/json" \
+              -u "$OO_USER:$OO_PASS" \
+              -d "[{\"event\":\"DEPLOYMENT_SUCCESSFUL\",\"status\":\"DEPLOYED\",\"image\":\"$IMAGE_TAG\",\"commit_sha\":\"$COMMIT\",\"actor\":\"$ACTOR\",\"timestamp\":\"$(date -u +%FT%TZ)\"}]"
+            echo "Despliegue verificado y registrado en OpenObserve"
         env:
           IMAGE_TAG: ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
           OO_USER: ${{ secrets.OPENOBSERVE_USER }}
           OO_PASS: ${{ secrets.OPENOBSERVE_PASS }}
+          OO_URL: ${{ secrets.OPENOBSERVE_URL || format('http://{0}:5080', secrets.EC2_HOST) }}
           COMMIT: ${{ github.sha }}
           ACTOR: ${{ github.actor }}

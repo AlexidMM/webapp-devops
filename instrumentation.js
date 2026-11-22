@@ -21,7 +21,7 @@ if (ENDPOINT && USER && PASS) {
   const sdk = new NodeSDK({
     traceExporter: new OTLPTraceExporter({
       url: `${ENDPOINT}/v1/traces`,
-      headers: { Authorization: auth },
+      headers: { Authorization: auth, 'stream-name': 'app_traces' },
     }),
     metricReader: new PeriodicExportingMetricReader({
       exporter: new OTLPMetricExporter({
@@ -34,7 +34,7 @@ if (ENDPOINT && USER && PASS) {
       new BatchLogRecordProcessor(
         new OTLPLogExporter({
           url: `${ENDPOINT}/v1/logs`,
-          headers: { Authorization: auth },
+          headers: { Authorization: auth, 'stream-name': 'app_logs' },
         })
       ),
     ],
