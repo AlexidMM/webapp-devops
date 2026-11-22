@@ -159,6 +159,16 @@ jobs:
                 -v openobserve_data:/data --restart always \
                 openobserve/openobserve:latest >/dev/null
             }
+            oo_start() {
+              echo "Recreando contenedor openobserve con las variables actuales (volumen conservado)"
+              sudo docker rm -f openobserve >/dev/null 2>&1 || true
+              sudo docker run -d --name openobserve -p 5080:5080 \
+                -e ZO_ROOT_USER_EMAIL="$OO_USER" \
+                -e ZO_ROOT_USER_PASSWORD="$OO_PASS_EFFECTIVE" \
+                -e ZO_SSRF_ALLOW_LOOPBACK=true \
+                -v openobserve_data:/data --restart always \
+                openobserve/openobserve:latest >/dev/null
+            }
             oo_wait() {
               for i in $(seq 1 30); do
                 OO_CODE=$(curl -sL -o /dev/null -w '%{http_code}' http://localhost:5080/ || true)
@@ -176,12 +186,7 @@ jobs:
                 -d "$OO_PROBE_PAYLOAD" || true
             }
 
-            if sudo docker ps -a --format '{{.Names}}' | grep -q '^openobserve$'; then
-              sudo docker start openobserve > /dev/null || true
-            else
-              oo_recreate
-              sleep 20
-            fi
+            oo_start
 
             echo "=== Verificando OpenObserve ==="
             if ! oo_wait; then

@@ -8,6 +8,227 @@
   "created": "2026-11-21T00:00:00.000Z",
   "tabs": [
     {
+      "tabId": "resumen",
+      "name": "Resumen",
+      "panels": [
+        {
+          "id": "Panel_00_01",
+          "type": "metric",
+          "title": "Pruebas aprobadas",
+          "description": "Eventos TESTS_PASSED en pipeline_logs",
+          "config": {"show_legends": false, "unit": "short", "decimals": 0, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
+          "queries": [{
+            "query": "SELECT count(_timestamp) as y_axis_1 FROM pipeline_logs WHERE event = 'TESTS_PASSED'",
+            "vrlFunctionQuery": "",
+            "customQuery": true,
+            "fields": {
+              "stream": "pipeline_logs", "stream_type": "logs",
+              "x": [],
+              "y": [{"label": "Aprobadas", "alias": "y_axis_1", "column": "_timestamp", "color": "#10b981", "aggregationFunction": "count"}],
+              "z": [], "breakdown": [],
+              "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+            },
+            "config": {"promql_legend": ""}
+          }],
+          "layout": {"x": 0, "y": 0, "w": 12, "h": 7, "i": 14},
+          "htmlContent": "", "markdownContent": ""
+        },
+        {
+          "id": "Panel_00_02",
+          "type": "metric",
+          "title": "Pruebas fallidas",
+          "description": "Eventos TESTS_FAILED en pipeline_logs",
+          "config": {"show_legends": false, "unit": "short", "decimals": 0, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
+          "queries": [{
+            "query": "SELECT count(_timestamp) as y_axis_1 FROM pipeline_logs WHERE event = 'TESTS_FAILED'",
+            "vrlFunctionQuery": "",
+            "customQuery": true,
+            "fields": {
+              "stream": "pipeline_logs", "stream_type": "logs",
+              "x": [],
+              "y": [{"label": "Fallidas", "alias": "y_axis_1", "column": "_timestamp", "color": "#ef4444", "aggregationFunction": "count"}],
+              "z": [], "breakdown": [],
+              "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+            },
+            "config": {"promql_legend": ""}
+          }],
+          "layout": {"x": 12, "y": 0, "w": 12, "h": 7, "i": 15},
+          "htmlContent": "", "markdownContent": ""
+        },
+        {
+          "id": "Panel_00_03",
+          "type": "metric",
+          "title": "Trazas OTLP",
+          "description": "Trazas HTTP, Express y SQLite en app_traces",
+          "config": {"show_legends": false, "unit": "short", "decimals": 0, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
+          "queries": [{
+            "query": "SELECT count(_timestamp) as y_axis_1 FROM app_traces",
+            "vrlFunctionQuery": "",
+            "customQuery": true,
+            "fields": {
+              "stream": "app_traces", "stream_type": "traces",
+              "x": [],
+              "y": [{"label": "Trazas", "alias": "y_axis_1", "column": "_timestamp", "color": "#8b5cf6", "aggregationFunction": "count"}],
+              "z": [], "breakdown": [],
+              "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+            },
+            "config": {"promql_legend": ""}
+          }],
+          "layout": {"x": 24, "y": 0, "w": 12, "h": 7, "i": 16},
+          "htmlContent": "", "markdownContent": ""
+        },
+        {
+          "id": "Panel_00_04",
+          "type": "metric",
+          "title": "Despliegues",
+          "description": "Eventos DEPLOYMENT_SUCCESSFUL en pipeline_logs",
+          "config": {"show_legends": false, "unit": "short", "decimals": 0, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
+          "queries": [{
+            "query": "SELECT count(_timestamp) as y_axis_1 FROM pipeline_logs WHERE event = 'DEPLOYMENT_SUCCESSFUL'",
+            "vrlFunctionQuery": "",
+            "customQuery": true,
+            "fields": {
+              "stream": "pipeline_logs", "stream_type": "logs",
+              "x": [],
+              "y": [{"label": "Deploys", "alias": "y_axis_1", "column": "_timestamp", "color": "#3b82f6", "aggregationFunction": "count"}],
+              "z": [], "breakdown": [],
+              "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+            },
+            "config": {"promql_legend": ""}
+          }],
+          "layout": {"x": 36, "y": 0, "w": 12, "h": 7, "i": 17},
+          "htmlContent": "", "markdownContent": ""
+        },
+        {
+          "id": "Panel_00_05",
+          "type": "line",
+          "title": "CPU EC2 (%)",
+          "description": "Porcentaje de uso de CPU del servidor",
+          "config": {"show_legends": true, "legends_position": null, "unit": "%", "decimals": 1, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
+          "queries": [{
+            "query": "SELECT histogram(_timestamp) as x_axis_1, avg(cpu_percent) as y_axis_1 FROM infra_metrics GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
+            "vrlFunctionQuery": "",
+            "customQuery": true,
+            "fields": {
+              "stream": "infra_metrics", "stream_type": "logs",
+              "x": [{"label": "Hora", "alias": "x_axis_1", "column": "_timestamp", "color": null, "aggregationFunction": "histogram", "sortBy": "ASC"}],
+              "y": [{"label": "CPU", "alias": "y_axis_1", "column": "cpu_percent", "color": "#ef4444", "aggregationFunction": "avg"}],
+              "z": [], "breakdown": [],
+              "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+            },
+            "config": {"promql_legend": ""}
+          }],
+          "layout": {"x": 0, "y": 7, "w": 12, "h": 8, "i": 18},
+          "htmlContent": "", "markdownContent": ""
+        },
+        {
+          "id": "Panel_00_06",
+          "type": "line",
+          "title": "RAM EC2 (%)",
+          "description": "Porcentaje de memoria usada del servidor",
+          "config": {"show_legends": true, "legends_position": null, "unit": "%", "decimals": 1, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
+          "queries": [{
+            "query": "SELECT histogram(_timestamp) as x_axis_1, avg(ram_percent) as y_axis_1 FROM infra_metrics GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
+            "vrlFunctionQuery": "",
+            "customQuery": true,
+            "fields": {
+              "stream": "infra_metrics", "stream_type": "logs",
+              "x": [{"label": "Hora", "alias": "x_axis_1", "column": "_timestamp", "color": null, "aggregationFunction": "histogram", "sortBy": "ASC"}],
+              "y": [{"label": "RAM", "alias": "y_axis_1", "column": "ram_percent", "color": "#f59e0b", "aggregationFunction": "avg"}],
+              "z": [], "breakdown": [],
+              "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+            },
+            "config": {"promql_legend": ""}
+          }],
+          "layout": {"x": 12, "y": 7, "w": 12, "h": 8, "i": 19},
+          "htmlContent": "", "markdownContent": ""
+        },
+        {
+          "id": "Panel_00_07",
+          "type": "line",
+          "title": "Red EC2 (MB)",
+          "description": "Bytes recibidos y transmitidos por minuto",
+          "config": {"show_legends": true, "legends_position": "bottom", "unit": "decbytes", "decimals": 1, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
+          "queries": [{
+            "query": "SELECT histogram(_timestamp) as x_axis_1, avg(net_rx_mb) as y_axis_1, avg(net_tx_mb) as y_axis_2 FROM infra_metrics GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
+            "vrlFunctionQuery": "",
+            "customQuery": true,
+            "fields": {
+              "stream": "infra_metrics", "stream_type": "logs",
+              "x": [{"label": "Hora", "alias": "x_axis_1", "column": "_timestamp", "color": null, "aggregationFunction": "histogram", "sortBy": "ASC"}],
+              "y": [
+                {"label": "RX", "alias": "y_axis_1", "column": "net_rx_mb", "color": "#22c55e", "aggregationFunction": "avg"},
+                {"label": "TX", "alias": "y_axis_2", "column": "net_tx_mb", "color": "#3b82f6", "aggregationFunction": "avg"}
+              ],
+              "z": [], "breakdown": [],
+              "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+            },
+            "config": {"promql_legend": ""}
+          }],
+          "layout": {"x": 24, "y": 7, "w": 12, "h": 8, "i": 20},
+          "htmlContent": "", "markdownContent": ""
+        },
+        {
+          "id": "Panel_00_08",
+          "type": "line",
+          "title": "Temperatura EC2 (°C)",
+          "description": "Sensor térmico disponible; 0 significa sin dato",
+          "config": {"show_legends": true, "legends_position": null, "unit": "°C", "decimals": 1, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
+          "queries": [{
+            "query": "SELECT histogram(_timestamp) as x_axis_1, avg(temperature_c) as y_axis_1 FROM infra_metrics GROUP BY x_axis_1 ORDER BY x_axis_1 ASC",
+            "vrlFunctionQuery": "",
+            "customQuery": true,
+            "fields": {
+              "stream": "infra_metrics", "stream_type": "logs",
+              "x": [{"label": "Hora", "alias": "x_axis_1", "column": "_timestamp", "color": null, "aggregationFunction": "histogram", "sortBy": "ASC"}],
+              "y": [{"label": "Temp", "alias": "y_axis_1", "column": "temperature_c", "color": "#06b6d4", "aggregationFunction": "avg"}],
+              "z": [], "breakdown": [],
+              "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+            },
+            "config": {"promql_legend": ""}
+          }],
+          "layout": {"x": 36, "y": 7, "w": 12, "h": 8, "i": 21},
+          "htmlContent": "", "markdownContent": ""
+        },
+        {
+          "id": "Panel_00_09",
+          "type": "table",
+          "title": "Últimos eventos del pipeline",
+          "description": "TESTS_PASSED, TESTS_FAILED y DEPLOYMENT_SUCCESSFUL en hora de México",
+          "config": {"show_legends": false, "legends_position": null, "wrap_table_cells": true, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
+          "queryType": "sql",
+          "queries": [{
+            "query": "SELECT timestamp_mx as x_axis_1, event as x_axis_2, status as x_axis_3, commit_sha as x_axis_4, actor as x_axis_5 FROM pipeline_logs ORDER BY _timestamp DESC LIMIT 15",
+            "vrlFunctionQuery": "",
+            "customQuery": true,
+            "fields": {
+              "stream": "pipeline_logs", "stream_type": "logs",
+              "x": [
+                {"label": "Hora (MX)", "alias": "x_axis_1", "column": "timestamp_mx", "color": null},
+                {"label": "Evento", "alias": "x_axis_2", "column": "event", "color": null},
+                {"label": "Estatus", "alias": "x_axis_3", "column": "status", "color": null},
+                {"label": "Commit", "alias": "x_axis_4", "column": "commit_sha", "color": null},
+                {"label": "Actor", "alias": "x_axis_5", "column": "actor", "color": null}
+              ],
+              "y": [], "z": [], "breakdown": [],
+              "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
+            },
+            "config": {"promql_legend": ""}
+          }],
+          "layout": {"x": 0, "y": 15, "w": 48, "h": 8, "i": 22},
+          "htmlContent": "", "markdownContent": ""
+        }
+      ]
+    },
+    {
       "tabId": "cicd",
       "name": "CI/CD",
       "panels": [

@@ -134,7 +134,7 @@ cd webapp-devops
 cat openobserve/dashboard.json
 ```
 
-En OpenObserve ve a *Dashboards > Import* y sube ese archivo. Tiene tres pestañas: CI/CD, Aplicación e Infraestructura.
+En OpenObserve ve a *Dashboards > Import* y sube ese archivo. Tiene cuatro pestañas: **Resumen**, CI/CD, Aplicación e Infraestructura. La pestaña Resumen muestra en una sola pantalla pruebas aprobadas/fallidas, trazas, despliegues, CPU, RAM, red, temperatura y los últimos eventos del pipeline, que es la evidencia directa del criterio 3.
 
 Las alertas se crean por API con el script `openobserve/setup-alerts.sh`. Cópialo a la EC2 y ejecútalo:
 
