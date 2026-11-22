@@ -23,7 +23,7 @@ async function agregarProducto(page, nombre) {
 }
 
 const datosGrafica = (page) =>
-  page.evaluate(() => Chart.getChart('metricsChart').data.datasets[0].data);
+  page.evaluate(() => Chart.getChart('metricsChart')?.data.datasets[0].data ?? null);
 
 test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
 
@@ -341,7 +341,7 @@ test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
 
     await expect(page.locator('#latencyChart')).toBeVisible();
     await expect.poll(() =>
-      page.evaluate(() => Chart.getChart('latencyChart').data.datasets[0].data.length)
+      page.evaluate(() => Chart.getChart('latencyChart')?.data.datasets[0].data.length ?? 0)
     ).toBeGreaterThan(0);
   });
 

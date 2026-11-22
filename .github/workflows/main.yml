@@ -68,11 +68,15 @@ jobs:
             '[{event:$event, status:$status, jest:$jest, playwright:$playwright,
                commit_sha:$commit_sha, actor:$actor, branch:$branch,
                run_id:$run_id, run_url:$run_url, timestamp:$timestamp}]' > /tmp/o2-test-event.json
-          curl -sf -X POST "$OO_URL/api/default/pipeline_logs/_json" \
+          if curl -sf --connect-timeout 5 --max-time 15 -X POST \
+            "$OO_URL/api/default/pipeline_logs/_json" \
             -H "Content-Type: application/json" \
             -u "$OO_USER:$OO_PASS" \
-            --data-binary @/tmp/o2-test-event.json
-          echo "Evento $EVENT enviado a OpenObserve ($OO_URL)"
+            --data-binary @/tmp/o2-test-event.json; then
+            echo "Evento $EVENT enviado a OpenObserve ($OO_URL)"
+          else
+            echo "Advertencia: OpenObserve no accesible desde el runner ($OO_URL). Revisar puerto 5080 / OPENOBSERVE_URL"
+          fi
 
       - name: Login en Docker Hub
         if: success() && github.event_name == 'push'

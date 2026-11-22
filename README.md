@@ -36,7 +36,7 @@ Cada prueba tiene un nombre descriptivo de la conducta verificada. Playwright le
 | `OPENOBSERVE_USER` / `OPENOBSERVE_PASS` | Email y contraseña del usuario root de OpenObserve. |
 | `OPENOBSERVE_URL` | Opcional: URL pública de OpenObserve (ej. `http://IP:5080`). Por defecto se usa `http://EC2_HOST:5080`. |
 
-Si OpenObserve solo escucha en `localhost`, el pipeline necesita `OPENOBSERVE_URL` accesible desde el runner; de lo contrario el evento queda en `continue-on-error` y el deploy continúa.
+Si OpenObserve solo escucha en `localhost`, el pipeline necesita `OPENOBSERVE_URL` accesible desde el runner o abrir el puerto TCP 5080 en el Security Group de EC2. Si el `curl` termina con `exit code 28` (timeout), ese es el motivo: el evento no se registra, pero el paso usa `continue-on-error` y no cancela el job.
 
 ## Flujo del pipeline (`.github/workflows/main.yml`)
 
