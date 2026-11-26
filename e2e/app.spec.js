@@ -79,7 +79,7 @@ test.describe('Suite E2E de Interfaz y Módulos - WebApp DevOps', () => {
     await expect(page.locator('#dashboard-screen')).toBeHidden();
   });
 
-  test('7. Limpieza de credenciales al cerrar sesión. Hola', async ({ page }) => {
+  test('7. Limpieza de credenciales al cerrar sesión. Hola Mundo', async ({ page }) => {
     await login(page);
     await page.click('#btn-logout');
 
