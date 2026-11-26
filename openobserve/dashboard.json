@@ -205,7 +205,7 @@
           "config": {"show_legends": false, "legends_position": null, "wrap_table_cells": true, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
           "queryType": "sql",
           "queries": [{
-            "query": "SELECT timestamp_mx as x_axis_1, event as x_axis_2, status as x_axis_3, commit_sha as x_axis_4, actor as x_axis_5 FROM pipeline_logs ORDER BY _timestamp DESC LIMIT 15",
+            "query": "SELECT timestamp_mx as x_axis_1, event as x_axis_2, status as x_axis_3, commit_sha as x_axis_4, actor as x_axis_5, jest as x_axis_6, playwright as x_axis_7 FROM pipeline_logs WHERE event != 'ALERT_FIRED' ORDER BY _timestamp DESC LIMIT 15",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
@@ -215,7 +215,9 @@
                 {"label": "Evento", "alias": "x_axis_2", "column": "event", "color": null},
                 {"label": "Estatus", "alias": "x_axis_3", "column": "status", "color": null},
                 {"label": "Commit", "alias": "x_axis_4", "column": "commit_sha", "color": null},
-                {"label": "Actor", "alias": "x_axis_5", "column": "actor", "color": null}
+                {"label": "Actor", "alias": "x_axis_5", "column": "actor", "color": null},
+                {"label": "Jest", "alias": "x_axis_6", "column": "jest", "color": null},
+                {"label": "Playwright", "alias": "x_axis_7", "column": "playwright", "color": null}
               ],
               "y": [], "z": [], "breakdown": [],
               "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
@@ -239,7 +241,7 @@
           "config": {"show_legends": true, "legends_position": "bottom", "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
           "queryType": "sql",
           "queries": [{
-            "query": "SELECT histogram(_timestamp) as \"x_axis_1\", event as \"x_axis_2\", count(_timestamp) as \"y_axis_1\" FROM \"pipeline_logs\" GROUP BY x_axis_1, x_axis_2 ORDER BY x_axis_1 ASC",
+            "query": "SELECT histogram(_timestamp) as \"x_axis_1\", event as \"x_axis_2\", count(_timestamp) as \"y_axis_1\" FROM \"pipeline_logs\" WHERE event != 'ALERT_FIRED' GROUP BY x_axis_1, x_axis_2 ORDER BY x_axis_1 ASC",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
@@ -265,7 +267,7 @@
           "config": {"show_legends": true, "legends_position": null, "wrap_table_cells": true, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
           "queryType": "sql",
           "queries": [{
-            "query": "SELECT timestamp_mx as \"x_axis_1\", event as \"x_axis_2\", status as \"x_axis_3\", branch as \"x_axis_4\", actor as \"x_axis_5\", commit_sha as \"x_axis_6\" FROM \"pipeline_logs\" ORDER BY _timestamp DESC LIMIT 30",
+            "query": "SELECT timestamp_mx as \"x_axis_1\", event as \"x_axis_2\", status as \"x_axis_3\", branch as \"x_axis_4\", actor as \"x_axis_5\", commit_sha as \"x_axis_6\", jest as \"x_axis_7\", playwright as \"x_axis_8\" FROM \"pipeline_logs\" WHERE event != 'ALERT_FIRED' ORDER BY _timestamp DESC LIMIT 30",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
@@ -276,7 +278,9 @@
                 {"label": "Estado", "alias": "x_axis_3", "column": "status", "color": null},
                 {"label": "Rama", "alias": "x_axis_4", "column": "branch", "color": null},
                 {"label": "Usuario", "alias": "x_axis_5", "column": "actor", "color": null},
-                {"label": "Commit", "alias": "x_axis_6", "column": "commit_sha", "color": null}
+                {"label": "Commit", "alias": "x_axis_6", "column": "commit_sha", "color": null},
+                {"label": "Jest", "alias": "x_axis_7", "column": "jest", "color": null},
+                {"label": "Playwright", "alias": "x_axis_8", "column": "playwright", "color": null}
               ],
               "y": [], "z": [], "breakdown": [],
               "filter": {"filterType": "group", "logicalOperator": "AND", "conditions": []}
@@ -294,7 +298,7 @@
           "config": {"show_legends": false, "unit": "short", "decimals": 0, "base_map": {"type": "osm"}, "map_view": {"zoom": 1, "lat": 0, "lng": 0}},
           "queryType": "sql",
           "queries": [{
-            "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"pipeline_logs\" WHERE status = 'FAILED'",
+            "query": "SELECT count(_timestamp) as \"y_axis_1\" FROM \"pipeline_logs\" WHERE event = 'TESTS_FAILED'",
             "vrlFunctionQuery": "",
             "customQuery": true,
             "fields": {
